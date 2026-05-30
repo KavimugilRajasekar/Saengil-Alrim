@@ -53,6 +53,7 @@ flutter:
 
   assets:
     - assets/icon/saengil_alrim_logo.png
+    - assets/icon/add.png
     - assets/sticker/
 
   fonts:

@@ -195,20 +195,50 @@ class HomeView extends StatelessWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddBirthdaySheet(context),
-        backgroundColor: AppColors.secondaryApricot,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.0),
-          side: const BorderSide(color: AppColors.accentBorder, width: 2.5),
+      floatingActionButton: Container(
+      width: 55,
+      height: 55,
+      decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(
+        color: Colors.black,
+        width: 2.5,
+      ),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.fromARGB(255, 181, 244, 181), // very light green
+          Color.fromARGB(255, 219, 245, 155), // very light yellow
+          Color.fromARGB(255, 246, 219, 157), // light gold
+        ],
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 8,
+          offset: Offset(0, 4),
         ),
-        icon: const Icon(Icons.add_rounded, color: AppColors.textDark, size: 24.0),
-        label: Text(
-          'Add Birthday',
-          style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0),
+      ],
+      ),
+      child: FloatingActionButton(
+        onPressed: () => _showAddBirthdaySheet(context),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        shape: const CircleBorder(),
+        child: Image.asset(
+          'assets/icon/user.png',
+          width: 24,
+          height: 24,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            // Fallback if image asset fails to load
+            return const Icon(Icons.add, size: 28);
+          },
         ),
       ),
+      ),  
     );
   }
 }
