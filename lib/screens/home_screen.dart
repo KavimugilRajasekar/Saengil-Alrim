@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../services/birthday_service.dart';
 import '../services/permission_service.dart';
+import '../services/update_service.dart';
 import '../widgets/app_styles.dart';
 import '../widgets/birthday_card.dart';
 import '../widgets/funky_calendar.dart';
@@ -27,7 +28,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // Check after first frame so the UI is ready
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPermissions());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPermissions();
+      _checkForUpdate();
+    });
   }
 
   @override
@@ -52,6 +56,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _missingPermissions = missing;
         _permissionsChecked = true;
       });
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    final info = await UpdateService().checkForUpdate();
+    if (info != null && mounted) {
+      // Small delay so the UI is fully settled before showing the dialog
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) {
+        await showUpdateDialog(context, info);
+      }
     }
   }
 

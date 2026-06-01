@@ -53,6 +53,10 @@
          Required for reliable background alarms on Samsung, Xiaomi, Huawei etc. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
+    <!-- Internet access for update checks -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
         android:label="생일알림"
         android:name="${applicationName}"
@@ -130,6 +134,11 @@
         <!-- Needed to open battery optimization settings -->
         <intent>
             <action android:name="android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+        </intent>
+        <!-- Needed for url_launcher to open browser for APK download -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>
