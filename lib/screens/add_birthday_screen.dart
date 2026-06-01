@@ -44,6 +44,9 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
   String? _selectedAdvanceRingtonePath;
   String? _selectedAdvanceRingtoneName;
 
+  // Tracks whether we've already applied last-record defaults (new form only)
+  bool _defaultsLoaded = false;
+
   late AnimationController _saveButtonController;
   late FixedExtentScrollController _monthScrollController;
   late FixedExtentScrollController _dayScrollController;
@@ -128,6 +131,33 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Only run once, and only when creating a new birthday (not editing).
+    if (_defaultsLoaded || widget.birthdayToEdit != null) return;
+    _defaultsLoaded = true;
+
+    // Pull the most recently added birthday and use its alarm settings
+    // as defaults so the user doesn't have to re-pick the same ringtone
+    // and time every time they add a new entry.
+    final provider = Provider.of<BirthdayProvider>(context, listen: false);
+    if (provider.birthdays.isEmpty) return;
+
+    // Use the last entry in the list (most recently added)
+    final last = provider.birthdays.last;
+
+    setState(() {
+      _enableDDayAlarm = last.enableDDayAlarm;
+      _enableReminderAlarm = last.enableThreeDaysAlarm;
+      _reminderDays = last.customAlarmDays.clamp(1, 14);
+      _dDayAlarmTime = _parseTime(last.dDayAlarmTimeStr);
+      _selectedDDayRingtonePath = last.dDayRingtonePath;
+      _selectedDDayRingtoneName = last.dDayRingtoneName;
+      _advanceAlarmTime = _parseTime(last.advanceAlarmTimeStr);
+      _selectedAdvanceRingtonePath = last.advanceRingtonePath;
+      _selectedAdvanceRingtoneName = last.advanceRingtoneName;
+    });
+  }
   void dispose() {
     _nameController.dispose();
     _notesController.dispose();
