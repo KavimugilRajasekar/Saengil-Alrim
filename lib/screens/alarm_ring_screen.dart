@@ -157,14 +157,16 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
 
   // ── Stop alarm ─────────────────────────────────────────────────
   Future<void> _stopAlarm() async {
-    await Alarm.stop(widget.alarmSettings.id);
-    // Reschedule for next year so the alarm repeats annually.
-    // Pass a 'now' that is 1 minute after the current alarm time so
-    // _nextOccurrence always rolls forward to next year, not today.
+    final firedId = widget.alarmSettings.id;
+    await Alarm.stop(firedId);
+    // Reschedule both alarms to their next future occurrence.
+    // Passing firedAlarmId lets NotificationService know which alarm just
+    // fired so it can correctly roll only that one forward (D-Day → next year,
+    // advance → recalculate from next year's D-Day if needed).
     if (widget.birthday != null) {
       await NotificationService().scheduleBirthdayAlarmsAfter(
         widget.birthday!,
-        after: DateTime.now().add(const Duration(minutes: 2)),
+        firedAlarmId: firedId,
       );
     }
     widget.onDismissed?.call();

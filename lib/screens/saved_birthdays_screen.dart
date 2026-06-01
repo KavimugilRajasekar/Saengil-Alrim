@@ -5,6 +5,7 @@ import '../services/birthday_service.dart';
 import '../widgets/app_styles.dart';
 import '../widgets/cute_sticker.dart';
 import 'birthday_detail_screen.dart';
+import 'cloud_sync_sheet.dart';
 
 // ── Bottom-sheet entry point (called from HomeScreen) ─────────────────────────
 class SavedBirthdaysSheet extends StatelessWidget {
@@ -93,13 +94,13 @@ class SavedBirthdaysSheet extends StatelessWidget {
                             style: TextStyle(fontSize: 48)),
                         const SizedBox(height: 12),
                         Text(
-                          '저장된 생일이 없어요',
+                          'No birthdays saved yet',
                           style: AppStyles.bodyBubblyBold
                               .copyWith(color: AppColors.textLight),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '홈에서 + 버튼으로 추가해보세요',
+                          'Tap + on the home screen to add one',
                           style: AppStyles.captionBubbly,
                         ),
                       ],
@@ -128,14 +129,11 @@ class SavedBirthdaysSheet extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 28),
             child: GestureDetector(
-              onTap: () {
-                // TODO: implement cloud connection
-              },
+              onTap: () => showCloudSyncSheet(context),
               child: Text(
-                'Connect to Cloud',
+                '클라우드에 연결',
                 style: AppStyles.captionBubbly.copyWith(
                   color: Colors.grey,
-                  decoration: TextDecoration.underline,
                   decorationColor: Colors.grey,
                 ),
               ),
@@ -158,7 +156,7 @@ class _SavedBirthdayTile extends StatelessWidget {
     final themeColor = AppColors.getRandomPastel(b.avatarColorIndex);
 
     final String dDayLabel =
-        b.isToday ? '🎉 오늘이에요!' : 'D-${b.daysUntil}';
+        b.isToday ? '🎉 Today!' : 'D-${b.daysUntil}';
 
     final Color dDayColor = b.isToday
         ? AppColors.primaryPink
@@ -219,7 +217,7 @@ class _SavedBirthdayTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         '${kMonthNamesShort[b.month - 1]} ${b.day}'
-                        '${b.birthYear != null ? ' · ${b.birthYear}년생' : ''}',
+                        '${b.birthYear != null ? ' · Born ${b.birthYear}' : ''}',
                         style: AppStyles.captionBubbly,
                       ),
                     ],

@@ -158,6 +158,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       _selectedAdvanceRingtoneName = last.advanceRingtoneName;
     });
   }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _notesController.dispose();

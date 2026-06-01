@@ -46,19 +46,33 @@ class NotificationService {
 
   // ── Schedule ──────────────────────────────────────────────────
   Future<void> scheduleBirthdayAlarms(FriendBirthday birthday) async {
-    await scheduleBirthdayAlarmsAfter(birthday, after: DateTime.now());
+    await scheduleBirthdayAlarmsAfter(birthday, firedAlarmId: null);
   }
 
-  /// Like [scheduleBirthdayAlarms] but uses [after] as the reference time
-  /// for [_nextOccurrence]. Pass a time slightly in the future (e.g. now + 2 min)
-  /// when rescheduling after an alarm fires to guarantee it rolls to next year.
+  /// Reschedules both alarms for [birthday] to their next future occurrence.
+  ///
+  /// [firedAlarmId] — the alarm ID that just rang and was dismissed.
+  ///   • If it matches the D-Day alarm ID  → D-Day rolls to next year;
+  ///     advance alarm also recalculates from next year's D-Day.
+  ///   • If it matches the advance alarm ID → advance rolls past today;
+  ///     D-Day stays this year if it hasn't fired yet.
+  ///   • null (initial scheduling / edit) → both use DateTime.now() as
+  ///     reference, picking the next future occurrence naturally.
   Future<void> scheduleBirthdayAlarmsAfter(
     FriendBirthday birthday, {
-    required DateTime after,
+    required int? firedAlarmId,
   }) async {
     await cancelBirthdayAlarms(birthday.id);
 
-    final now = after;
+    final now = DateTime.now();
+
+    // When the D-Day alarm just fired we need to push the reference past
+    // today's birthday time so _nextOccurrence rolls to next year.
+    // For the advance alarm firing we only need to push past right now,
+    // which DateTime.now() already satisfies.
+    final dDayRef = (firedAlarmId == _dDayId(birthday.id))
+        ? now.add(const Duration(minutes: 2))
+        : now;
 
     // ── D-Day alarm ──────────────────────────────────────────────
     if (birthday.enableDDayAlarm && birthday.dDayRingtonePath != null) {
@@ -68,7 +82,7 @@ class NotificationService {
         day: birthday.day,
         hour: t.hour,
         minute: t.minute,
-        now: now,
+        now: dDayRef,
       );
 
       final audioPath = _validatePath(birthday.dDayRingtonePath!);
@@ -109,25 +123,29 @@ class NotificationService {
     // ── Advance reminder alarm ────────────────────────────────────
     if (birthday.enableThreeDaysAlarm && birthday.advanceRingtonePath != null) {
       final t = _parseTime(birthday.advanceAlarmTimeStr);
+      // Base the advance date off the same D-Day reference so both alarms
+      // stay in sync (same year).
       final dDayDate = _nextOccurrence(
         month: birthday.month,
         day: birthday.day,
         hour: t.hour,
         minute: t.minute,
-        now: now,
+        now: dDayRef,
       );
       var advanceDate = dDayDate.subtract(Duration(days: birthday.customAlarmDays));
 
-      // If advance date already passed, roll to next year's D-Day
+      // If the advance date is already in the past (e.g. advance alarm just
+      // fired, or customAlarmDays == 0 and D-Day is today), roll it to the
+      // advance date for next year's D-Day.
       if (!advanceDate.isAfter(now)) {
-        final nextDDay = _nextOccurrence(
+        final nextYearDDay = _nextOccurrence(
           month: birthday.month,
           day: birthday.day,
           hour: t.hour,
           minute: t.minute,
           now: dDayDate.add(const Duration(seconds: 1)),
         );
-        advanceDate = nextDDay.subtract(Duration(days: birthday.customAlarmDays));
+        advanceDate = nextYearDDay.subtract(Duration(days: birthday.customAlarmDays));
       }
 
       final audioPath = _validatePath(birthday.advanceRingtonePath!);

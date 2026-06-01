@@ -23,6 +23,9 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.saengil_alrim/battery"
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
 
+    // Holds the alarm payload from the launch/tap intent until Flutter reads it.
+    private var pendingAlarmPayload: String? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -57,6 +60,15 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    // ── Notification tap payload ───────────────────
+                    // Flutter calls this after init to check if the app was
+                    // launched by tapping an alarm notification (unlocked device,
+                    // app killed). Returns the birthday ID string or null.
+                    "getNotificationLaunchPayload" -> {
+                        result.success(pendingAlarmPayload)
+                        pendingAlarmPayload = null // consume once
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -67,6 +79,10 @@ class MainActivity : FlutterActivity() {
         // The alarm package's AlarmPlugin.notificationObserver handles this
         // correctly via AlarmRingingLiveData when an alarm is actually ringing.
         super.onCreate(savedInstanceState)
+
+        // Capture payload from the intent that launched this activity
+        // (e.g. user tapped the alarm notification while device was unlocked).
+        extractAlarmPayload(intent)
 
         // Request battery optimization exemption on first launch.
         if (!isIgnoringBatteryOptimizations()) {
@@ -94,6 +110,20 @@ class MainActivity : FlutterActivity() {
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             )
+        }
+        // Also capture payload for the new intent (app running, notification tapped)
+        extractAlarmPayload(intent)
+    }
+
+    // ── Extract alarm payload from intent extras ──────────────────
+    // The alarm package puts the payload in the "payload" extra of the
+    // PendingIntent it creates for the notification tap action.
+    private fun extractAlarmPayload(intent: Intent?) {
+        if (intent == null) return
+        val payload = intent.getStringExtra("payload")
+            ?: intent.getStringExtra("notification_payload")
+        if (!payload.isNullOrBlank()) {
+            pendingAlarmPayload = payload
         }
     }
 
