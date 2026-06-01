@@ -8,9 +8,15 @@ import '../widgets/app_styles.dart';
 import '../widgets/cute_sticker.dart';
 
 class AddBirthdayScreen extends StatefulWidget {
-  const AddBirthdayScreen({super.key, this.birthdayToEdit, this.initialDate});
+  const AddBirthdayScreen({
+    super.key,
+    this.birthdayToEdit,
+    this.initialDate,
+    this.scrollController,
+  });
   final FriendBirthday? birthdayToEdit;
   final DateTime? initialDate;
+  final ScrollController? scrollController;
 
   @override
   State<AddBirthdayScreen> createState() => _AddBirthdayScreenState();
@@ -628,6 +634,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
+          controller: widget.scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

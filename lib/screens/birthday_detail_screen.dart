@@ -194,6 +194,8 @@ class _BirthdayDetailBodyState extends State<_BirthdayDetailBody> {
                           GestureDetector(
                             onTap: () {
                               Navigator.of(context).pop();
+                              final sheetController =
+                                  DraggableScrollableController();
                               showModalBottomSheet(
                                 context: context,
                                 isScrollControlled: true,
@@ -201,14 +203,28 @@ class _BirthdayDetailBodyState extends State<_BirthdayDetailBody> {
                                 backgroundColor: Colors.transparent,
                                 builder: (context) =>
                                     DraggableScrollableSheet(
-                                  initialChildSize: 1.0,
+                                  controller: sheetController,
+                                  initialChildSize: 0.4,
                                   minChildSize: 0.0,
                                   maxChildSize: 1.0,
                                   snap: true,
                                   snapSizes: const [0.0, 1.0],
                                   expand: false,
-                                  builder: (context, _) =>
-                                      AddBirthdayScreen(birthdayToEdit: b),
+                                  builder: (context, sc) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                      sheetController.animateTo(
+                                        1.0,
+                                        duration: const Duration(
+                                            milliseconds: 380),
+                                        curve: Curves.easeOutCubic,
+                                      );
+                                    });
+                                    return AddBirthdayScreen(
+                                      birthdayToEdit: b,
+                                      scrollController: sc,
+                                    );
+                                  },
                                 ),
                               );
                             },

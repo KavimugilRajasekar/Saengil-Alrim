@@ -11,20 +11,34 @@ class HomeScreen extends StatelessWidget {
 
   void _showAddBirthdaySheet(BuildContext context) {
     final provider = Provider.of<BirthdayProvider>(context, listen: false);
+    final sheetController = DraggableScrollableController();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       enableDrag: true,
       backgroundColor: Colors.transparent,
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 1.0,
+        controller: sheetController,
+        initialChildSize: 0.4,
         minChildSize: 0.0,
         maxChildSize: 1.0,
         snap: true,
         snapSizes: const [0.0, 1.0],
         expand: false,
-        builder: (context, scrollController) =>
-            AddBirthdayScreen(initialDate: provider.selectedDate),
+        builder: (context, scrollController) {
+          // Animate to full screen after the sheet is rendered
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            sheetController.animateTo(
+              1.0,
+              duration: const Duration(milliseconds: 380),
+              curve: Curves.easeOutCubic,
+            );
+          });
+          return AddBirthdayScreen(
+            initialDate: provider.selectedDate,
+            scrollController: scrollController,
+          );
+        },
       ),
     );
   }
