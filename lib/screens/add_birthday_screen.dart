@@ -540,7 +540,9 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                   Text(
                     hasRingtone ? selectedName! : 'No ringtone',
                     style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: true,
+                    maxLines: 3,
+                    overflow: TextOverflow.visible,
                   ),
                   Text(
                     hasRingtone
@@ -549,22 +551,6 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                     style: AppStyles.captionBubbly,
                   ),
                 ],
-              ),
-            ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.cardBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.accentBorder, width: 1.5),
-              ),
-              child: Text(
-                hasRingtone ? 'Change' : 'Select',
-                style: AppStyles.captionBubbly.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark),
               ),
             ),
           ],
