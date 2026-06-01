@@ -93,7 +93,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       _selectedColorIndex = b.avatarColorIndex;
       _enableDDayAlarm = b.enableDDayAlarm;
       _enableReminderAlarm = b.enableThreeDaysAlarm;
-      _reminderDays = b.customAlarmDays;
+      _reminderDays = b.customAlarmDays.clamp(1, 14);
       _dDayAlarmTime = _parseTime(b.dDayAlarmTimeStr);
       _selectedDDayRingtonePath = b.dDayRingtonePath;
       _selectedDDayRingtoneName = b.dDayRingtoneName;
@@ -571,25 +571,17 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
             style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0),
           ),
           const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Tap to change', style: AppStyles.captionBubbly),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.pastelMint,
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: AppColors.accentBorder, width: 1.5),
-                ),
-                child: Text(
-                  _formatDisplayTime(time),
-                  style: AppStyles.bodyBubblyBold.copyWith(fontSize: 15),
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.pastelMint,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.accentBorder, width: 1.5),
+            ),
+            child: Text(
+              _formatDisplayTime(time),
+              style: AppStyles.bodyBubblyBold.copyWith(fontSize: 15),
+            ),
           ),
         ],
       ),
@@ -991,9 +983,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                     Border.all(color: AppColors.accentBorder, width: 1.5),
               ),
               child: Text(
-                _reminderDays == 0
-                    ? 'Same day'
-                    : '$_reminderDays day${_reminderDays > 1 ? 's' : ''}',
+                '$_reminderDays day${_reminderDays > 1 ? 's' : ''}',
                 style: AppStyles.bodyBubblyBold.copyWith(fontSize: 12),
               ),
             ),
@@ -1012,9 +1002,9 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
           ),
           child: Slider(
             value: _reminderDays.toDouble(),
-            min: 0,
+            min: 1,
             max: 14,
-            divisions: 14,
+            divisions: 13,
             onChanged: (v) => setState(() => _reminderDays = v.round()),
           ),
         ),
