@@ -46,9 +46,19 @@ class NotificationService {
 
   // ── Schedule ──────────────────────────────────────────────────
   Future<void> scheduleBirthdayAlarms(FriendBirthday birthday) async {
+    await scheduleBirthdayAlarmsAfter(birthday, after: DateTime.now());
+  }
+
+  /// Like [scheduleBirthdayAlarms] but uses [after] as the reference time
+  /// for [_nextOccurrence]. Pass a time slightly in the future (e.g. now + 2 min)
+  /// when rescheduling after an alarm fires to guarantee it rolls to next year.
+  Future<void> scheduleBirthdayAlarmsAfter(
+    FriendBirthday birthday, {
+    required DateTime after,
+  }) async {
     await cancelBirthdayAlarms(birthday.id);
 
-    final now = DateTime.now();
+    final now = after;
 
     // ── D-Day alarm ──────────────────────────────────────────────
     if (birthday.enableDDayAlarm && birthday.dDayRingtonePath != null) {

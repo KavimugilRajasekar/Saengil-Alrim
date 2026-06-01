@@ -132,7 +132,7 @@ class SavedBirthdaysSheet extends StatelessWidget {
                 // TODO: implement cloud connection
               },
               child: Text(
-                '클라우드에 연결',
+                'Connect to Cloud',
                 style: AppStyles.captionBubbly.copyWith(
                   color: Colors.grey,
                   decoration: TextDecoration.underline,

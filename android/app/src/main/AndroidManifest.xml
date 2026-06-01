@@ -88,6 +88,9 @@
         AlarmService: the foreground service that plays audio and shows
         the full-screen notification. stopWithTask="false" keeps it alive
         even when the user swipes the app away from recents.
+        Note: showWhenLocked/turnScreenOn are Activity-only attributes and
+        have no effect on a Service — the AlarmPlugin handles lock-screen
+        visibility via AlarmRingingLiveData on the Activity side.
         -->
         <service
             android:name="com.gdelataillade.alarm.alarm.AlarmService"

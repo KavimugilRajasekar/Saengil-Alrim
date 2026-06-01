@@ -212,6 +212,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 16.0),
 
               // ── Permission banners ───────────────────────────────
+              if (_missingPermissions.contains(MissingPermission.notifications))
+                _PermissionBanner(
+                  icon: Icons.notifications_off_rounded,
+                  title: 'Notification Permission Required',
+                  message:
+                      'Alarm notifications are blocked. Tap to grant permission — this is required to see alarms on the lock screen.',
+                  color: const Color(0xFFE8F4FD),
+                  borderColor: const Color(0xFF4D96FF),
+                  onTap: () async {
+                    await PermissionService().requestNotificationPermission();
+                  },
+                ),
+
               if (_missingPermissions.contains(MissingPermission.batteryOptimization))
                 _PermissionBanner(
                   icon: Icons.battery_alert_rounded,

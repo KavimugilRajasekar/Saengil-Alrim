@@ -1,13 +1,19 @@
 package com.example.saengil_alrim
 
+import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.WindowManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "com.example.saengil_alrim/battery"
+    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -22,6 +29,15 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+
+                    // ── Notification permission (Android 13+) ─────
+                    "hasNotificationPermission" ->
+                        result.success(hasNotificationPermission())
+
+                    "requestNotificationPermission" -> {
+                        requestNotificationPermission()
+                        result.success(null)
+                    }
 
                     // ── Battery optimization ──────────────────────
                     "isIgnoringBatteryOptimizations" ->
@@ -47,13 +63,59 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // NOTE: Do NOT set showWhenLocked / turnScreenOn here unconditionally.
+        // The alarm package's AlarmPlugin.notificationObserver handles this
+        // correctly via AlarmRingingLiveData when an alarm is actually ringing.
         super.onCreate(savedInstanceState)
-        // Auto-request battery optimization exemption on first launch.
-        // This is the single most important step for Samsung, Xiaomi,
-        // Huawei, OnePlus — they all aggressively kill background apps.
+
+        // Request battery optimization exemption on first launch.
         if (!isIgnoringBatteryOptimizations()) {
             requestIgnoreBatteryOptimizations()
         }
+
+        // Request POST_NOTIFICATIONS on Android 13+ — without this the
+        // full-screen alarm notification is silently suppressed.
+        if (!hasNotificationPermission()) {
+            requestNotificationPermission()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Activity is already running (singleTop) and user tapped the alarm
+        // notification. Apply lock-screen flags so the ring screen shows.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+    }
+
+    // ── Notification permission ───────────────────────────────────
+
+    private fun hasNotificationPermission(): Boolean {
+        // Below API 33 notifications are always allowed
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (hasNotificationPermission()) return
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST_CODE
+        )
     }
 
     // ── Battery optimization ──────────────────────────────────────
@@ -67,25 +129,22 @@ class MainActivity : FlutterActivity() {
     private fun requestIgnoreBatteryOptimizations() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         try {
-            val intent = Intent(
-                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                Uri.parse("package:$packageName")
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
             )
-            startActivity(intent)
         } catch (e: Exception) {
-            // Fallback: open the general battery optimization list
             try {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            } catch (_: Exception) {
-                // Device has no such settings page — nothing to do
-            }
+            } catch (_: Exception) {}
         }
     }
 
     // ── Exact alarm permission ────────────────────────────────────
 
     private fun canScheduleExactAlarms(): Boolean {
-        // Below API 31 exact alarms are always allowed
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         return am.canScheduleExactAlarms()
@@ -94,13 +153,13 @@ class MainActivity : FlutterActivity() {
     private fun openExactAlarmSettings() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         try {
-            val intent = Intent(
-                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                Uri.parse("package:$packageName")
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    Uri.parse("package:$packageName")
+                )
             )
-            startActivity(intent)
         } catch (e: Exception) {
-            // Fallback: open app settings
             try {
                 startActivity(
                     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {

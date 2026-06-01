@@ -15,11 +15,15 @@ import '../widgets/cute_sticker.dart';
 class AlarmRingScreen extends StatefulWidget {
   final AlarmSettings alarmSettings;
   final FriendBirthday? birthday; // null = fallback if not found
+  /// Called when the screen is dismissed (stop or snooze) so the caller
+  /// can clear the deduplication guard and allow re-showing if needed.
+  final VoidCallback? onDismissed;
 
   const AlarmRingScreen({
     super.key,
     required this.alarmSettings,
     this.birthday,
+    this.onDismissed,
   });
 
   @override
@@ -154,10 +158,16 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
   // ── Stop alarm ─────────────────────────────────────────────────
   Future<void> _stopAlarm() async {
     await Alarm.stop(widget.alarmSettings.id);
-    // Reschedule for next year so the alarm repeats annually
+    // Reschedule for next year so the alarm repeats annually.
+    // Pass a 'now' that is 1 minute after the current alarm time so
+    // _nextOccurrence always rolls forward to next year, not today.
     if (widget.birthday != null) {
-      await NotificationService().scheduleBirthdayAlarms(widget.birthday!);
+      await NotificationService().scheduleBirthdayAlarmsAfter(
+        widget.birthday!,
+        after: DateTime.now().add(const Duration(minutes: 2)),
+      );
     }
+    widget.onDismissed?.call();
     if (mounted) Navigator.of(context).pop();
   }
 
