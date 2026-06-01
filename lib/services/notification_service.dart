@@ -1,255 +1,216 @@
+import 'dart:io';
+
 import 'package:alarm/alarm.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
+
 import 'birthday_service.dart';
 
+/// Handles scheduling and cancelling birthday alarms using the
+/// [alarm] package, which provides full-screen alarm UI support
+/// and plays the user-selected ringtone file.
+///
+/// Audio paths arriving here are already resolved to internal
+/// storage relative paths (e.g. "alarm_audio/dday_123.mp3") by
+/// [BirthdayProvider._resolveRingtonePaths] before saving.
+///
+/// KEY SETTINGS:
+/// - androidStopAlarmOnTermination = false  → alarm keeps ringing
+///   even when the user swipes the app away from recents.
+/// - androidFullScreenIntent = true         → wakes screen and
+///   shows full-screen alarm UI.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
-  final Alarm alarm = Alarm();
-
+  // ── Init ──────────────────────────────────────────────────────
   Future<void> init() async {
-    // 1. Initialize time zones
-    tz.initializeTimeZones();
-    try {
-      final TimezoneInfo timeZoneInfo = await FlutterTimezone.getLocalTimezone();
-      final String timeZoneName = timeZoneInfo.identifier;
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
-    } catch (e) {
-      debugPrint('Could not set local location: $e. Falling back to UTC.');
-      tz.setLocalLocation(tz.getLocation('UTC'));
-    }
-
-    // 2. Initialize notification settings
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const DarwinInitializationSettings initializationSettingsDarwin =
-        DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-    );
-
-    await _notificationsPlugin.initialize(
-      settings: initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse details) {
-        debugPrint('Notification clicked: ${details.id}');
-      },
-    );
-
-    // 3. Request permissions explicitly for Android 13+
-    _requestAndroidPermissions();
-
-    // 4. Initialize alarm package
     await Alarm.init();
   }
 
-  Future<void> _requestAndroidPermissions() async {
-    try {
-      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-          _notificationsPlugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      if (androidImplementation != null) {
-        await androidImplementation.requestNotificationsPermission();
-      }
-    } catch (e) {
-      debugPrint('Error requesting notifications permissions: $e');
-    }
+  // ── ID helpers ────────────────────────────────────────────────
+  // IDs must be positive, non-zero, fit in signed 32-bit int.
+  // D-Day  → even numbers ≥ 2
+  // Advance → odd numbers ≥ 3
+
+  int _dDayId(String friendId) {
+    final h = friendId.hashCode.abs() % 1000000;
+    final id = (h * 2) + 2;
+    return id == 0 ? 2 : id;
   }
 
-  // Generate stable, unique notification IDs from a friend's string ID
-  int _getNotificationId(String friendId, bool isThreeDaysBefore) {
-    // String hashCode is stable during execution. We mask it to 30 bits to stay in safe 32-bit positive int range.
-    final baseHash = friendId.hashCode & 0x3FFFFFFF;
-    return isThreeDaysBefore ? baseHash + 1 : baseHash;
+  int _advanceId(String friendId) {
+    final h = friendId.hashCode.abs() % 1000000;
+    return (h * 2) + 3;
   }
 
-  // Schedule D-day and advance customizable alarms
+  // ── Schedule ──────────────────────────────────────────────────
   Future<void> scheduleBirthdayAlarms(FriendBirthday birthday) async {
-    // First cancel any existing alarms for this friend
     await cancelBirthdayAlarms(birthday.id);
 
     final now = DateTime.now();
-    final currentYear = now.year;
 
-    // Parse D-Day alarm time
-    int dDayHour = 9;
-    int dDayMinute = 0;
-    try {
-      final parts = birthday.dDayAlarmTimeStr.split(':');
-      if (parts.length == 2) {
-        dDayHour = int.parse(parts[0]);
-        dDayMinute = int.parse(parts[1]);
-      }
-    } catch (e) {
-      debugPrint('Error parsing D-Day alarm time: $e. Falling back to 9:00 AM');
-    }
-
-    // Parse advance alarm time
-    int advanceHour = 9;
-    int advanceMinute = 0;
-    try {
-      final parts = birthday.advanceAlarmTimeStr.split(':');
-      if (parts.length == 2) {
-        advanceHour = int.parse(parts[0]);
-        advanceMinute = int.parse(parts[1]);
-      }
-    } catch (e) {
-      debugPrint('Error parsing advance alarm time: $e. Falling back to 9:00 AM');
-    }
-
-    // Custom sound configuration for D-Day alarm
-    final String? dDayRawSoundName = (birthday.dDayRingtonePath == 'chime' ||
-            birthday.dDayRingtonePath == 'fairy' ||
-            birthday.dDayRingtonePath == 'music_box')
-        ? birthday.dDayRingtonePath
-        : null;
-
-    // Custom sound configuration for advance alarm
-    final String? advanceRawSoundName = (birthday.advanceRingtonePath == 'chime' ||
-            birthday.advanceRingtonePath == 'fairy' ||
-            birthday.advanceRingtonePath == 'music_box')
-        ? birthday.advanceRingtonePath
-        : null;
-
-    // D-Day Alarm scheduling
-    if (birthday.enableDDayAlarm) {
-      final dDayId = _getNotificationId(birthday.id, false);
-      // Get the last day of the month for the current year to handle invalid dates (like Feb 29 in non-leap years)
-      int daysInMonth = DateTime(currentYear, birthday.month + 1, 0).day;
-      int effectiveDay = birthday.day > daysInMonth ? daysInMonth : birthday.day;
-      var dDayDate = DateTime(currentYear, birthday.month, effectiveDay, dDayHour, dDayMinute);
-      if (dDayDate.isBefore(now)) {
-        dDayDate = DateTime(currentYear + 1, birthday.month, effectiveDay, dDayHour, dDayMinute);
-      }
-
-      // Custom sound configuration for D-Day alarm
-      final AndroidNotificationDetails dDayAndroidDetails = AndroidNotificationDetails(
-        dDayRawSoundName != null ? 'birthday_alarms_dDay_$dDayRawSoundName' : 'birthday_alarms_dDay',
-        dDayRawSoundName != null ? 'Birthday Alarms D-Day ($dDayRawSoundName)' : 'Birthday Alarms D-Day',
-        channelDescription: 'Reminders for your friends\' birthdays.',
-        importance: Importance.high,
-        priority: Priority.high,
-        playSound: true,
-        sound: dDayRawSoundName != null ? RawResourceAndroidNotificationSound(dDayRawSoundName) : null,
+    // ── D-Day alarm ──────────────────────────────────────────────
+    if (birthday.enableDDayAlarm && birthday.dDayRingtonePath != null) {
+      final t = _parseTime(birthday.dDayAlarmTimeStr);
+      final fireAt = _nextOccurrence(
+        month: birthday.month,
+        day: birthday.day,
+        hour: t.hour,
+        minute: t.minute,
+        now: now,
       );
 
-      final DarwinNotificationDetails dDayIosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        sound: dDayRawSoundName != null ? '$dDayRawSoundName.mp3' : null,
-      );
-
-      final NotificationDetails dDayPlatformDetails = NotificationDetails(
-        android: dDayAndroidDetails,
-        iOS: dDayIosDetails,
-      );
-
-      try {
-        final tzDDayDate = tz.TZDateTime.from(dDayDate, tz.local);
-        await _notificationsPlugin.zonedSchedule(
-          id: dDayId,
-          title: 'Birthday Today! 🎂',
-          body: 'It is ${birthday.name}\'s birthday today! Show them some love! 🎉',
-          scheduledDate: tzDDayDate,
-          notificationDetails: dDayPlatformDetails,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        );
-        debugPrint('Scheduled D-Day alarm for ${birthday.name} at $dDayDate (ID: $dDayId, Sound: $dDayRawSoundName)');
-      } catch (e) {
-        debugPrint('Failed to schedule D-Day alarm: $e');
-      }
-    }
-
-    // Advance customizable Alarm scheduling
-    if (birthday.enableThreeDaysAlarm) {
-      final advanceId = _getNotificationId(birthday.id, true);
-
-      // Calculate D-Day first using the advance alarm time?
-      // Actually, the advance reminder is based on the D-Day, but the time of day for the advance reminder is separate.
-      // We calculate the D-Day date (month and day) and then use the advance alarm time for the time of day.
-      // Get the last day of the month for the current year to handle invalid dates (like Feb 29 in non-leap years)
-      int daysInMonth = DateTime(currentYear, birthday.month + 1, 0).day;
-      int effectiveDay = birthday.day > daysInMonth ? daysInMonth : birthday.day;
-      var dDayDateForAdvance = DateTime(currentYear, birthday.month, effectiveDay, advanceHour, advanceMinute);
-      if (dDayDateForAdvance.isBefore(now)) {
-        dDayDateForAdvance = DateTime(currentYear + 1, birthday.month, effectiveDay, advanceHour, advanceMinute);
-      }
-      var advanceDate = dDayDateForAdvance.subtract(Duration(days: birthday.customAlarmDays));
-
-      // If advance date is already in the past, schedule it for the next occurrence next year
-      if (advanceDate.isBefore(now)) {
-        var nextDDayDate = DateTime(currentYear + 1, birthday.month, effectiveDay, advanceHour, advanceMinute);
-        if (nextDDayDate.isBefore(now)) {
-          nextDDayDate = DateTime(currentYear + 2, birthday.month, effectiveDay, advanceHour, advanceMinute);
+      final audioPath = _validatePath(birthday.dDayRingtonePath!);
+      if (audioPath != null) {
+        try {
+          final success = await Alarm.set(
+            alarmSettings: AlarmSettings(
+              id: _dDayId(birthday.id),
+              dateTime: fireAt,
+              assetAudioPath: audioPath,
+              loopAudio: true,
+              vibrate: true,
+              androidFullScreenIntent: true,
+              // CRITICAL: keep ringing even when app is swiped away
+              androidStopAlarmOnTermination: false,
+              warningNotificationOnKill: Platform.isIOS,
+              volumeSettings: VolumeSettings.fade(
+                fadeDuration: const Duration(seconds: 10),
+                volume: 1.0,
+              ),
+              notificationSettings: NotificationSettings(
+                title: '🎂 Birthday Today!',
+                body: "It's ${birthday.name}'s birthday! Show them some love 💕",
+                stopButton: 'Stop',
+              ),
+              payload: birthday.id,
+            ),
+          );
+          debugPrint(
+            '[Alarm] D-Day scheduled for ${birthday.name} at $fireAt → success=$success',
+          );
+        } catch (e) {
+          debugPrint('[Alarm] Failed to schedule D-Day for ${birthday.name}: $e');
         }
-        advanceDate = nextDDayDate.subtract(Duration(days: birthday.customAlarmDays));
+      }
+    }
+
+    // ── Advance reminder alarm ────────────────────────────────────
+    if (birthday.enableThreeDaysAlarm && birthday.advanceRingtonePath != null) {
+      final t = _parseTime(birthday.advanceAlarmTimeStr);
+      final dDayDate = _nextOccurrence(
+        month: birthday.month,
+        day: birthday.day,
+        hour: t.hour,
+        minute: t.minute,
+        now: now,
+      );
+      var advanceDate = dDayDate.subtract(Duration(days: birthday.customAlarmDays));
+
+      // If advance date already passed, roll to next year's D-Day
+      if (!advanceDate.isAfter(now)) {
+        final nextDDay = _nextOccurrence(
+          month: birthday.month,
+          day: birthday.day,
+          hour: t.hour,
+          minute: t.minute,
+          now: dDayDate.add(const Duration(seconds: 1)),
+        );
+        advanceDate = nextDDay.subtract(Duration(days: birthday.customAlarmDays));
       }
 
-      // Custom sound configuration for advance alarm
-      final AndroidNotificationDetails advanceAndroidDetails = AndroidNotificationDetails(
-        advanceRawSoundName != null ? 'birthday_alarms_advance_$advanceRawSoundName' : 'birthday_alarms_advance',
-        advanceRawSoundName != null ? 'Birthday Alarms Advance ($advanceRawSoundName)' : 'Birthday Alarms Advance',
-        channelDescription: 'Reminders for your friends\'birthdays.',
-        importance: Importance.high,
-        priority: Priority.high,
-        playSound: true,
-        sound: advanceRawSoundName != null ? RawResourceAndroidNotificationSound(advanceRawSoundName) : null,
-      );
+      final audioPath = _validatePath(birthday.advanceRingtonePath!);
+      if (audioPath != null) {
+        final daysLabel = birthday.customAlarmDays == 0
+            ? 'today'
+            : 'in ${birthday.customAlarmDays} day${birthday.customAlarmDays > 1 ? 's' : ''}';
 
-      final DarwinNotificationDetails advanceIosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        sound: advanceRawSoundName != null ? '$advanceRawSoundName.mp3' : null,
-      );
-
-      final NotificationDetails advancePlatformDetails = NotificationDetails(
-        android: advanceAndroidDetails,
-        iOS: advanceIosDetails,
-      );
-
-      try {
-        final tzAdvanceDate = tz.TZDateTime.from(advanceDate, tz.local);
-        final String bodyText = birthday.customAlarmDays == 0
-            ? '${birthday.name}\'s birthday is today! Have you prepared a gift/card yet?'
-            : '${birthday.name}\'s birthday is in ${birthday.customAlarmDays} days! Have you prepared a gift/card yet?';
-
-        await _notificationsPlugin.zonedSchedule(
-          id: advanceId,
-          title: 'Birthday Upcoming! 🎁',
-          body: bodyText,
-          scheduledDate: tzAdvanceDate,
-          notificationDetails: advancePlatformDetails,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        );
-        debugPrint('Scheduled advance reminder (${birthday.customAlarmDays} days before) for ${birthday.name} at $advanceDate (ID: $advanceId, Sound: $advanceRawSoundName)');
-      } catch (e) {
-        debugPrint('Failed to schedule advance alarm: $e');
+        try {
+          final success = await Alarm.set(
+            alarmSettings: AlarmSettings(
+              id: _advanceId(birthday.id),
+              dateTime: advanceDate,
+              assetAudioPath: audioPath,
+              loopAudio: true,
+              vibrate: true,
+              androidFullScreenIntent: true,
+              androidStopAlarmOnTermination: false,
+              warningNotificationOnKill: Platform.isIOS,
+              volumeSettings: VolumeSettings.fade(
+                fadeDuration: const Duration(seconds: 10),
+                volume: 1.0,
+              ),
+              notificationSettings: NotificationSettings(
+                title: '🎁 Birthday Reminder!',
+                body: "${birthday.name}'s birthday is $daysLabel! Time to prepare 🎁",
+                stopButton: 'Stop',
+              ),
+              payload: birthday.id,
+            ),
+          );
+          debugPrint(
+            '[Alarm] Advance scheduled for ${birthday.name} at $advanceDate → success=$success',
+          );
+        } catch (e) {
+          debugPrint('[Alarm] Failed to schedule advance for ${birthday.name}: $e');
+        }
       }
     }
   }
 
-  // Cancel alarms for a birthday entry
+  // ── Cancel ────────────────────────────────────────────────────
   Future<void> cancelBirthdayAlarms(String birthdayId) async {
-    final dDayId = _getNotificationId(birthdayId, false);
-    final threeDaysId = _getNotificationId(birthdayId, true);
+    await Alarm.stop(_dDayId(birthdayId));
+    await Alarm.stop(_advanceId(birthdayId));
+    debugPrint('[Alarm] Cancelled alarms for birthday ID: $birthdayId');
+  }
 
-    await _notificationsPlugin.cancel(id: dDayId);
-    await _notificationsPlugin.cancel(id: threeDaysId);
-    debugPrint('Cancelled alarms for ID $birthdayId (IDs: $dDayId, $threeDaysId)');
+  // ── Helpers ───────────────────────────────────────────────────
+
+  /// Validates that the audio path is usable by the alarm package.
+  /// Returns the path if valid, null otherwise.
+  String? _validatePath(String path) {
+    // Flutter asset (bundled in APK) — always valid
+    if (path.startsWith('assets/')) return path;
+
+    // Relative path → alarm package resolves from app documents dir
+    if (!path.startsWith('/')) return path;
+
+    // Absolute path → verify file exists
+    if (File(path).existsSync()) return path;
+
+    debugPrint('[Alarm] Audio file not found: $path');
+    return null;
+  }
+
+  ({int hour, int minute}) _parseTime(String timeStr) {
+    try {
+      final parts = timeStr.split(':');
+      if (parts.length == 2) {
+        return (hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      }
+    } catch (_) {}
+    return (hour: 9, minute: 0);
+  }
+
+  DateTime _nextOccurrence({
+    required int month,
+    required int day,
+    required int hour,
+    required int minute,
+    required DateTime now,
+  }) {
+    final year = now.year;
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final effectiveDay = day.clamp(1, daysInMonth);
+
+    var candidate = DateTime(year, month, effectiveDay, hour, minute);
+    if (!candidate.isAfter(now)) {
+      final daysInMonthNext = DateTime(year + 1, month + 1, 0).day;
+      final effectiveDayNext = day.clamp(1, daysInMonthNext);
+      candidate = DateTime(year + 1, month, effectiveDayNext, hour, minute);
+    }
+    return candidate;
   }
 }

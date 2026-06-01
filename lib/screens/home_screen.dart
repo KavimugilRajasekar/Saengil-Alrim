@@ -1,13 +1,58 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../services/birthday_service.dart';
+import '../services/permission_service.dart';
 import '../widgets/app_styles.dart';
 import '../widgets/birthday_card.dart';
 import '../widgets/funky_calendar.dart';
 import 'add_birthday_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  List<MissingPermission> _missingPermissions = [];
+  bool _permissionsChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Check after first frame so the UI is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPermissions());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Re-check when user returns from Settings
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _permissionsChecked) {
+      _checkPermissions();
+    }
+  }
+
+  Future<void> _checkPermissions() async {
+    if (!Platform.isAndroid) return;
+    final missing = await PermissionService().checkAll();
+    if (mounted) {
+      setState(() {
+        _missingPermissions = missing;
+        _permissionsChecked = true;
+      });
+    }
+  }
 
   void _showAddBirthdaySheet(BuildContext context) {
     final provider = Provider.of<BirthdayProvider>(context, listen: false);
@@ -26,7 +71,6 @@ class HomeScreen extends StatelessWidget {
         snapSizes: const [0.0, 1.0],
         expand: false,
         builder: (context, scrollController) {
-          // Animate to full screen after the sheet is rendered
           WidgetsBinding.instance.addPostFrameCallback((_) {
             sheetController.animateTo(
               1.0,
@@ -58,7 +102,7 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──
+              // ── Header ──────────────────────────────────────────
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -82,7 +126,7 @@ class HomeScreen extends StatelessWidget {
                         width: 50,
                         height: 50,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, e, st) => Container(
+                        errorBuilder: (context, e, st) => Container(
                           width: 50,
                           height: 50,
                           color: AppColors.primaryPink,
@@ -117,13 +161,42 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 24.0),
+              const SizedBox(height: 16.0),
 
-              // ── Calendar ──
+              // ── Permission banners ───────────────────────────────
+              if (_missingPermissions.contains(MissingPermission.batteryOptimization))
+                _PermissionBanner(
+                  icon: Icons.battery_alert_rounded,
+                  title: 'Battery Optimization Active',
+                  message:
+                      'Your phone may kill alarms in the background. Tap to fix — this is required for reliable birthday alarms.',
+                  color: const Color(0xFFFFEDD5),
+                  borderColor: const Color(0xFFFF922B),
+                  onTap: () async {
+                    await PermissionService().requestIgnoreBatteryOptimizations();
+                  },
+                ),
+
+              if (_missingPermissions.contains(MissingPermission.exactAlarm))
+                _PermissionBanner(
+                  icon: Icons.alarm_off_rounded,
+                  title: 'Exact Alarm Permission Needed',
+                  message:
+                      'Without this, alarms may fire late or not at all. Tap to open Settings and allow exact alarms.',
+                  color: const Color(0xFFFFE5E5),
+                  borderColor: Colors.redAccent,
+                  onTap: () async {
+                    await PermissionService().requestExactAlarmPermission();
+                  },
+                ),
+
+              if (_missingPermissions.isNotEmpty) const SizedBox(height: 8),
+
+              // ── Calendar ─────────────────────────────────────────
               const FunkyCalendar(),
               const SizedBox(height: 24.0),
 
-              // ── Birthdays on selected date ──
+              // ── Birthdays on selected date ────────────────────────
               Row(
                 children: [
                   const Text('📍', style: TextStyle(fontSize: 20.0)),
@@ -171,7 +244,7 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 24.0),
 
-              // ── Upcoming Birthdays ──
+              // ── This & next month birthdays ───────────────────────
               Builder(builder: (context) {
                 final now = DateTime.now();
                 final thisMonthName = kMonthNamesShort[now.month - 1];
@@ -247,9 +320,75 @@ class HomeScreen extends StatelessWidget {
             width: 24,
             height: 24,
             fit: BoxFit.contain,
-            errorBuilder: (_, e, st) =>
-                const Icon(Icons.add, size: 28),
+            errorBuilder: (context, e, st) => const Icon(Icons.add, size: 28),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Permission banner widget ──────────────────────────────────────────────────
+class _PermissionBanner extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final Color color;
+  final Color borderColor;
+  final VoidCallback onTap;
+
+  const _PermissionBanner({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.color,
+    required this.borderColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor, width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: borderColor, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppStyles.bodyBubblyBold.copyWith(
+                      fontSize: 13,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    message,
+                    style: AppStyles.captionBubbly.copyWith(
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.arrow_forward_ios_rounded,
+                size: 14, color: borderColor),
+          ],
         ),
       ),
     );

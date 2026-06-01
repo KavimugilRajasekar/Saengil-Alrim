@@ -1,21 +1,75 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+    ══════════════════════════════════════════════════════════════
+    PERMISSIONS — what each one does and which Android version needs it
+    ══════════════════════════════════════════════════════════════
+
+    RECEIVE_BOOT_COMPLETED   → reschedule alarms after device reboot (all versions)
+    VIBRATE                  → vibrate when alarm fires (all versions)
+    WAKE_LOCK                → keep CPU awake while alarm is ringing (all versions)
+    USE_FULL_SCREEN_INTENT   → show full-screen alarm UI over lock screen (API 29+)
+    FOREGROUND_SERVICE       → run AlarmService as foreground (API 28+)
+    FOREGROUND_SERVICE_MEDIA_PLAYBACK → required for mediaPlayback foreground type (API 34+)
+    ACCESS_NOTIFICATION_POLICY → needed to ring in Do-Not-Disturb mode (API 23+)
+    POST_NOTIFICATIONS       → show notification on Android 13+ (API 33+)
+
+    EXACT ALARM PERMISSIONS (critical — read the note below):
+    USE_EXACT_ALARM          → auto-granted at install, no user prompt needed (API 33+)
+                               Google Play restricts this to alarm/calendar apps.
+    SCHEDULE_EXACT_ALARM     → user must manually grant via Settings on API 31+.
+                               On API 31-32 it is granted by default.
+                               On API 33+ it is DENIED by default.
+    We declare BOTH so the alarm fires exactly on time across all versions.
+
+    READ_EXTERNAL_STORAGE    → read audio files on Android ≤ 12 (API ≤ 32)
+    READ_MEDIA_AUDIO         → read audio files on Android 13+ (API 33+)
+    REQUEST_INSTALL_PACKAGES → NOT needed — removed
+    ══════════════════════════════════════════════════════════════
+    -->
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Exact alarm: USE_EXACT_ALARM is auto-granted (API 33+), no user prompt -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- Exact alarm: SCHEDULE_EXACT_ALARM covers API 21-32 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+
+    <!-- Audio file access -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+
+    <!-- Battery optimization: REQUEST_IGNORE_BATTERY_OPTIMIZATIONS lets us
+         ask the user to whitelist the app so Android doesn't kill it.
+         Required for reliable background alarms on Samsung, Xiaomi, Huawei etc. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+
     <application
         android:label="생일알림"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon"
+        android:usesCleartextTraffic="true">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -25,21 +79,57 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+
+        <!--
+        AlarmService: the foreground service that plays audio and shows
+        the full-screen notification. stopWithTask="false" keeps it alive
+        even when the user swipes the app away from recents.
+        -->
+        <service
+            android:name="com.gdelataillade.alarm.alarm.AlarmService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false"/>
+
+        <!--
+        AlarmReceiver: BroadcastReceiver that Android calls when the
+        AlarmManager fires at the scheduled time. Must be exported so
+        the system can deliver the broadcast.
+        -->
+        <receiver
+            android:name="com.gdelataillade.alarm.alarm.AlarmReceiver"
+            android:exported="true"/>
+
+        <!--
+        BootReceiver: reschedules all saved alarms after device reboot.
+        Without this, all alarms are lost when the phone restarts.
+        -->
+        <receiver
+            android:name="com.gdelataillade.alarm.alarm.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <!-- Some devices send QUICKBOOT_POWERON instead of BOOT_COMPLETED -->
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- Flutter embedding metadata — do not remove -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Needed to open battery optimization settings -->
+        <intent>
+            <action android:name="android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
         </intent>
     </queries>
 </manifest>

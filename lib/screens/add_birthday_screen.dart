@@ -577,35 +577,33 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
   Widget _timeChip(TimeOfDay time, {required bool isDDay}) {
     return GestureDetector(
       onTap: () => _pickTime(isDDay: isDDay),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isDDay ? 'Alarm Time' : 'Reminder Time',
-                  style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0),
-                ),
-                Text('Tap to change', style: AppStyles.captionBubbly),
-              ],
-            ),
+          Text(
+            isDDay ? 'Alarm Time' : 'Reminder Time',
+            style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.pastelMint,
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppColors.accentBorder, width: 1.5),
-            ),
-            child: Text(
-              _formatDisplayTime(time),
-              style: AppStyles.bodyBubblyBold.copyWith(fontSize: 15),
-            ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Tap to change', style: AppStyles.captionBubbly),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.pastelMint,
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: AppColors.accentBorder, width: 1.5),
+                ),
+                child: Text(
+                  _formatDisplayTime(time),
+                  style: AppStyles.bodyBubblyBold.copyWith(fontSize: 15),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -925,162 +923,173 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Birthday Alarm ──────────────────────────────────────────
+          // ── Birthday Alarm root ─────────────────────────────────────
           _alarmToggleRow(
             label: 'Birthday Alarm',
             sublabel: 'Fires on the actual birthday',
             value: _enableDDayAlarm,
             onChanged: (v) => setState(() => _enableDDayAlarm = v),
           ),
-          if (_enableDDayAlarm) ...[
-            _treeChild(
-              isLast: false,
-              child: _timeChip(_dDayAlarmTime, isDDay: true),
-            ),
-            _treeChild(
-              isLast: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ringtone',
-                      style:
-                          AppStyles.bodyBubblyBold.copyWith(fontSize: 12.0)),
-                  const SizedBox(height: 5),
-                  _ringtonePickerRow(
-                    selectedPath: _selectedDDayRingtonePath,
-                    selectedName: _selectedDDayRingtoneName,
-                    isDDay: true,
-                  ),
-                  if (_selectedDDayRingtonePath == null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 5.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline_rounded,
-                              size: 12, color: Colors.redAccent),
-                          const SizedBox(width: 4),
-                          Text(
-                            'A ringtone is required to save',
-                            style: AppStyles.captionBubbly.copyWith(
-                                color: Colors.redAccent,
-                                fontStyle: FontStyle.italic),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
+          _AnimatedTreeBranch(
+            visible: _enableDDayAlarm,
+            children: [
+              _treeChild(
+                isLast: false,
+                child: _timeChip(_dDayAlarmTime, isDDay: true),
               ),
-            ),
-          ],
+              _treeChild(
+                isLast: true,
+                child: _ringtoneNode(
+                  selectedPath: _selectedDDayRingtonePath,
+                  selectedName: _selectedDDayRingtoneName,
+                  isDDay: true,
+                ),
+              ),
+            ],
+          ),
 
           const SizedBox(height: 14),
           const Divider(color: AppColors.accentBorder, thickness: 1.0),
           const SizedBox(height: 14),
 
-          // ── Advance Reminder ────────────────────────────────────────
+          // ── Advance Reminder root ───────────────────────────────────
           _alarmToggleRow(
             label: 'Advance Reminder',
-            sublabel: 'Remind me days before !',
+            sublabel: 'Remind me days before birthday',
             value: _enableReminderAlarm,
             onChanged: (v) => setState(() => _enableReminderAlarm = v),
           ),
-          if (_enableReminderAlarm) ...[
-            _treeChild(
-              isLast: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Days before',
-                          style: AppStyles.captionBubbly.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textDark)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.pastelLavender,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: AppColors.accentBorder, width: 1.5),
-                        ),
-                        child: Text(
-                          _reminderDays == 0
-                              ? 'Same day'
-                              : '$_reminderDays day${_reminderDays > 1 ? 's' : ''}',
-                          style: AppStyles.bodyBubblyBold
-                              .copyWith(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: AppColors.primaryPink,
-                      inactiveTrackColor:
-                          AppColors.primaryPink.withValues(alpha: 0.3),
-                      thumbColor: AppColors.pastelLavender,
-                      overlayColor:
-                          AppColors.pastelLavender.withValues(alpha: 0.2),
-                      thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 10),
-                      trackHeight: 4,
-                    ),
-                    child: Slider(
-                      value: _reminderDays.toDouble(),
-                      min: 0,
-                      max: 14,
-                      divisions: 14,
-                      onChanged: (v) =>
-                          setState(() => _reminderDays = v.round()),
-                    ),
-                  ),
-                ],
+          _AnimatedTreeBranch(
+            visible: _enableReminderAlarm,
+            children: [
+              _treeChild(
+                isLast: false,
+                child: _daysBefore(),
               ),
-            ),
-            _treeChild(
-              isLast: false,
-              child: _timeChip(_advanceAlarmTime, isDDay: false),
-            ),
-            _treeChild(
-              isLast: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ringtone',
-                      style:
-                          AppStyles.bodyBubblyBold.copyWith(fontSize: 12.0)),
-                  const SizedBox(height: 5),
-                  _ringtonePickerRow(
-                    selectedPath: _selectedAdvanceRingtonePath,
-                    selectedName: _selectedAdvanceRingtoneName,
-                    isDDay: false,
-                  ),
-                  if (_selectedAdvanceRingtonePath == null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 5.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline_rounded,
-                              size: 12, color: Colors.redAccent),
-                          const SizedBox(width: 4),
-                          Text(
-                            'A ringtone is required to save',
-                            style: AppStyles.captionBubbly.copyWith(
-                                color: Colors.redAccent,
-                                fontStyle: FontStyle.italic),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
+              _treeChild(
+                isLast: false,
+                child: _timeChip(_advanceAlarmTime, isDDay: false),
+              ),
+              _treeChild(
+                isLast: true,
+                child: _ringtoneNode(
+                  selectedPath: _selectedAdvanceRingtonePath,
+                  selectedName: _selectedAdvanceRingtoneName,
+                  isDDay: false,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Days-before row + slider (used as a tree child).
+  Widget _daysBefore() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Days Before',
+                style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.pastelLavender,
+                borderRadius: BorderRadius.circular(20),
+                border:
+                    Border.all(color: AppColors.accentBorder, width: 1.5),
+              ),
+              child: Text(
+                _reminderDays == 0
+                    ? 'Same day'
+                    : '$_reminderDays day${_reminderDays > 1 ? 's' : ''}',
+                style: AppStyles.bodyBubblyBold.copyWith(fontSize: 12),
               ),
             ),
           ],
-        ],
-      ),
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: AppColors.primaryPink,
+            inactiveTrackColor:
+                AppColors.primaryPink.withValues(alpha: 0.3),
+            thumbColor: AppColors.pastelLavender,
+            overlayColor: AppColors.pastelLavender.withValues(alpha: 0.2),
+            thumbShape:
+                const RoundSliderThumbShape(enabledThumbRadius: 10),
+            trackHeight: 4,
+          ),
+          child: Slider(
+            value: _reminderDays.toDouble(),
+            min: 0,
+            max: 14,
+            divisions: 14,
+            onChanged: (v) => setState(() => _reminderDays = v.round()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Ringtone node — the picker row, with the warning as its own sub-branch.
+  Widget _ringtoneNode({
+    required String? selectedPath,
+    required String? selectedName,
+    required bool isDDay,
+  }) {
+    final missing = selectedPath == null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Ringtone',
+            style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
+        const SizedBox(height: 5),
+        _ringtonePickerRow(
+          selectedPath: selectedPath,
+          selectedName: selectedName,
+          isDDay: isDDay,
+        ),
+        // Warning is a sub-branch of the ringtone card
+        _AnimatedTreeBranch(
+          visible: missing,
+          children: [
+            _treeChild(
+              isLast: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEEEE),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: Colors.redAccent.withValues(alpha: 0.4),
+                      width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 13, color: Colors.redAccent),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'A ringtone is required to save',
+                        style: AppStyles.captionBubbly.copyWith(
+                            color: Colors.redAccent,
+                            fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1092,31 +1101,48 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     required ValueChanged<bool> onChanged,
   }) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: value ? AppColors.primaryPink : AppColors.textLight,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.accentBorder, width: 1),
-              ),
+        // Dot indicator
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: value ? const Color(0xFF1B5E20) : AppColors.textLight,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: value ? const Color(0xFF1B5E20) : AppColors.accentBorder,
+              width: 1.5,
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style:
-                        AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
-                Text(sublabel, style: AppStyles.captionBubbly),
-              ],
-            ),
-          ],
+            boxShadow: value
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF1B5E20).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    )
+                  ]
+                : null,
+          ),
         ),
+        const SizedBox(width: 10),
+        // Label + sublabel — Expanded so text wraps instead of overflowing
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
+              Text(sublabel,
+                  style: AppStyles.captionBubbly,
+                  softWrap: true),
+            ],
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Switch — fixed width, never squeezed
         Material(
           color: Colors.transparent,
           child: Switch(
@@ -1130,56 +1156,119 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     );
   }
 
-  /// Wraps a child widget with a tree-style indent + vertical/horizontal line.
+  /// Wraps a child with a light-grey tree connector line — no gap in the stem.
   Widget _treeChild({required Widget child, required bool isLast}) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8.0),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Tree lines
-            SizedBox(
-              width: 24,
-              child: CustomPaint(
-                painter: _TreeLinePainter(isLast: isLast),
-              ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Line column spans full IntrinsicHeight — stem is unbroken
+          SizedBox(
+            width: 24,
+            child: CustomPaint(
+              painter: _TreeLinePainter(isLast: isLast),
             ),
-            const SizedBox(width: 8),
-            Expanded(child: child),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          // Top padding = elbowY - half of label line height ≈ 12px
+          // so the label baseline aligns with the elbow at 20px
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12.0, bottom: 4.0),
+              child: child,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Draws the vertical + horizontal connector lines for the tree layout.
+/// Animated expand/collapse wrapper — clips height only, no horizontal shift.
+class _AnimatedTreeBranch extends StatefulWidget {
+  final bool visible;
+  final List<Widget> children;
+  const _AnimatedTreeBranch(
+      {required this.visible, required this.children});
+
+  @override
+  State<_AnimatedTreeBranch> createState() => _AnimatedTreeBranchState();
+}
+
+class _AnimatedTreeBranchState extends State<_AnimatedTreeBranch>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+      value: widget.visible ? 1.0 : 0.0,
+    );
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutCubic);
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedTreeBranch old) {
+    super.didUpdateWidget(old);
+    if (widget.visible != old.visible) {
+      widget.visible ? _ctrl.forward() : _ctrl.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizeTransition(
+      sizeFactor: _anim,
+      axisAlignment: -1.0, // expand from top
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: widget.children,
+      ),
+    );
+  }
+}
+
+/// Draws light-grey vertical + horizontal connector lines for the tree.
+/// The elbow always points to a fixed distance from the top (where the label is).
 class _TreeLinePainter extends CustomPainter {
   final bool isLast;
+  static const _treeColor = Color(0xFFBDBDBD); // light grey
+  // Fixed Y offset from top of the child where the label sits
+  static const double _elbowY = 20.0;
+
   const _TreeLinePainter({required this.isLast});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.accentBorder.withValues(alpha: 0.35)
+      ..color = _treeColor
       ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-    final midX = size.width * 0.5;
-    final midY = size.height * 0.5;
+    const stemX = 10.0;
 
-    // Vertical line — full height if not last, half height if last
+    // Vertical stem — from top to elbowY for last node, full height otherwise
     canvas.drawLine(
-      Offset(midX, 0),
-      Offset(midX, isLast ? midY : size.height),
+      const Offset(stemX, 0),
+      Offset(stemX, isLast ? _elbowY : size.height),
       paint,
     );
 
-    // Horizontal elbow to the right
+    // Horizontal elbow at fixed label height
     canvas.drawLine(
-      Offset(midX, midY),
-      Offset(size.width, midY),
+      const Offset(stemX, _elbowY),
+      Offset(size.width, _elbowY),
       paint,
     );
   }

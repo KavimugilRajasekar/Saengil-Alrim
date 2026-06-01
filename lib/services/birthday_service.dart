@@ -3,7 +3,10 @@
 // All birthday data logic, persistence, and state management in one place.
 
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart';
 
@@ -247,19 +250,22 @@ class BirthdayProvider with ChangeNotifier {
   }
 
   Future<void> addBirthday(FriendBirthday birthday) async {
-    _birthdays.add(birthday);
+    // Copy audio files to internal storage and update paths before saving
+    final resolved = await _resolveRingtonePaths(birthday);
+    _birthdays.add(resolved);
     notifyListeners();
     await _saveToDisk();
-    await NotificationService().scheduleBirthdayAlarms(birthday);
+    await NotificationService().scheduleBirthdayAlarms(resolved);
   }
 
   Future<void> updateBirthday(FriendBirthday updated) async {
     final index = _birthdays.indexWhere((b) => b.id == updated.id);
     if (index != -1) {
-      _birthdays[index] = updated;
+      final resolved = await _resolveRingtonePaths(updated);
+      _birthdays[index] = resolved;
       notifyListeners();
       await _saveToDisk();
-      await NotificationService().scheduleBirthdayAlarms(updated);
+      await NotificationService().scheduleBirthdayAlarms(resolved);
     }
   }
 
@@ -273,6 +279,55 @@ class BirthdayProvider with ChangeNotifier {
   Future<void> _rescheduleAllAlarms() async {
     for (final b in _birthdays) {
       await NotificationService().scheduleBirthdayAlarms(b);
+    }
+  }
+
+  /// Copies any external audio files (absolute paths from file_picker)
+  /// into the app's internal documents directory and returns a new
+  /// [FriendBirthday] with the internal relative paths stored.
+  /// This ensures the alarm package can always read the audio file
+  /// even when the app is closed and permissions are not active.
+  Future<FriendBirthday> _resolveRingtonePaths(FriendBirthday b) async {
+    String? dDayPath = b.dDayRingtonePath;
+    String? advancePath = b.advanceRingtonePath;
+
+    if (dDayPath != null && dDayPath.startsWith('/')) {
+      dDayPath = await _copyAudioToInternal(dDayPath, 'dday_${b.id}') ?? dDayPath;
+    }
+    if (advancePath != null && advancePath.startsWith('/')) {
+      advancePath = await _copyAudioToInternal(advancePath, 'advance_${b.id}') ?? advancePath;
+    }
+
+    if (dDayPath == b.dDayRingtonePath && advancePath == b.advanceRingtonePath) {
+      return b; // nothing changed
+    }
+    return b.copyWith(
+      dDayRingtonePath: dDayPath,
+      advanceRingtonePath: advancePath,
+    );
+  }
+
+  /// Copies [sourcePath] to `<documents>/alarm_audio/<cacheKey>.<ext>`
+  /// and returns the relative path, or null on failure.
+  Future<String?> _copyAudioToInternal(String sourcePath, String cacheKey) async {
+    try {
+      final source = File(sourcePath);
+      if (!source.existsSync()) return null;
+
+      final docsDir = await getApplicationDocumentsDirectory();
+      final audioDir = Directory('${docsDir.path}/alarm_audio');
+      if (!audioDir.existsSync()) audioDir.createSync(recursive: true);
+
+      final ext = sourcePath.contains('.')
+          ? sourcePath.split('.').last.toLowerCase()
+          : 'mp3';
+      final dest = File('${audioDir.path}/$cacheKey.$ext');
+      await source.copy(dest.path);
+
+      return 'alarm_audio/$cacheKey.$ext';
+    } catch (e) {
+      debugPrint('Error copying audio to internal storage: $e');
+      return null;
     }
   }
 }
