@@ -272,7 +272,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       SnackBar(
         content: Text(
           '${_nameController.text.trim()}\'s Birthday ${isEditing ? 'updated' : 'saved'}',
-          style: const TextStyle(fontFamily: AppStyles.bubblyFont),
+          style: const TextStyle(fontFamily: AppStyles.bubblyFont, color: Colors.black,),
         ),
         backgroundColor: AppColors.primaryPink,
         behavior: SnackBarBehavior.floating,

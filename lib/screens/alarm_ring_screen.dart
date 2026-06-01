@@ -156,17 +156,6 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
-  // ── Snooze 10 min ──────────────────────────────────────────────
-  Future<void> _snoozeAlarm() async {
-    final snoozeTime = DateTime.now().add(const Duration(minutes: 10));
-    final snoozed = widget.alarmSettings.copyWith(
-      dateTime: snoozeTime,
-    );
-    await Alarm.stop(widget.alarmSettings.id);
-    await Alarm.set(alarmSettings: snoozed);
-    if (mounted) Navigator.of(context).pop();
-  }
-
   // ── Helpers ────────────────────────────────────────────────────
   String _formatClock(DateTime dt) {
     final h = dt.hour == 0
@@ -231,14 +220,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
                       fontFamily: AppStyles.bubblyFont,
                       fontSize: 52,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black26,
-                          blurRadius: 8,
-                          offset: Offset(0, 3),
-                        ),
-                      ],
+                      color: AppColors.textDark,
                     ),
                   ),
                   Text(
@@ -246,7 +228,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
                     style: const TextStyle(
                       fontFamily: AppStyles.bubblyFont,
                       fontSize: 14,
-                      color: Colors.white70,
+                      color: AppColors.textLight,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -259,7 +241,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
                   const SizedBox(height: 28),
 
                   // ── Name & message ───────────────────────────────
-                  _buildMessage(b),
+                  _buildMessage(b, themeColor),
 
                   const Spacer(),
 
@@ -277,28 +259,22 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
   }
 
   Widget _buildBackground(Color themeColor) {
+    // Very light, almost-transparent frosted wash —
+    // tinted with the birthday person's card color at low opacity.
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
           colors: [
-            _darken(themeColor, 0.25),
-            _darken(themeColor, 0.05),
-            _darken(themeColor, 0.15),
+            themeColor.withValues(alpha: 0.4),
+            themeColor.withValues(alpha: 0.86),
+            Colors.white.withValues(alpha: 0.6),
           ],
-          stops: const [0.0, 0.5, 1.0],
+          stops: const [0.0, 0.45, 1.0],
         ),
       ),
     );
-  }
-
-  Color _darken(Color color, double amount) {
-    final hsl = HSLColor.fromColor(color);
-    return hsl
-        .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
-        .withSaturation((hsl.saturation + 0.2).clamp(0.0, 1.0))
-        .toColor();
   }
 
   Widget _buildPulsingAvatar(FriendBirthday? b, Color themeColor) {
@@ -315,13 +291,13 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
               _RingWave(
                 progress: _ringAnim.value,
                 maxRadius: 110,
-                color: Colors.white.withValues(alpha: 0.15),
+                color: themeColor.withValues(alpha: 0.35),
               ),
               // Expanding ring wave 2 (offset by 0.5)
               _RingWave(
                 progress: (_ringAnim.value + 0.5) % 1.0,
                 maxRadius: 110,
-                color: Colors.white.withValues(alpha: 0.10),
+                color: themeColor.withValues(alpha: 0.20),
               ),
               // Pulsing avatar
               Transform.scale(
@@ -332,11 +308,11 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
                   decoration: BoxDecoration(
                     color: themeColor,
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 4),
+                    border: Border.all(color: AppColors.accentBorder, width: 3),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 20,
+                        color: themeColor.withValues(alpha: 0.45),
+                        blurRadius: 24,
                         spreadRadius: 4,
                       ),
                     ],
@@ -354,7 +330,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
     );
   }
 
-  Widget _buildMessage(FriendBirthday? b) {
+  Widget _buildMessage(FriendBirthday? b, Color themeColor) {
     final isToday = _isBirthdayToday;
     final name = b?.name ?? 'Birthday';
 
@@ -366,21 +342,21 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: themeColor.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white38, width: 1.5),
+              border: Border.all(color: AppColors.accentBorder.withValues(alpha: 0.3), width: 1.5),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.alarm_rounded, color: Colors.white, size: 16),
+                const Icon(Icons.alarm_rounded, color: AppColors.textDark, size: 16),
                 const SizedBox(width: 6),
                 Text(
                   isToday ? 'Birthday Alarm 🎂' : 'Birthday Reminder 🎁',
                   style: const TextStyle(
                     fontFamily: AppStyles.bubblyFont,
                     fontSize: 13,
-                    color: Colors.white,
+                    color: AppColors.textDark,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -396,15 +372,8 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
             style: const TextStyle(
               fontFamily: AppStyles.handwritingFont,
               fontSize: 38,
-              color: Colors.white,
+              color: AppColors.textDark,
               fontWeight: FontWeight.bold,
-              shadows: [
-                Shadow(
-                  color: Colors.black26,
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
-                ),
-              ],
             ),
           ),
           const SizedBox(height: 10),
@@ -420,7 +389,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
             style: const TextStyle(
               fontFamily: AppStyles.bubblyFont,
               fontSize: 16,
-              color: Colors.white,
+              color: AppColors.textDark,
               height: 1.5,
             ),
           ),
@@ -431,15 +400,16 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
+                color: themeColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white30, width: 1),
+                border: Border.all(
+                    color: AppColors.accentBorder.withValues(alpha: 0.2), width: 1),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.sticky_note_2_outlined,
-                      color: Colors.white70, size: 14),
+                      color: AppColors.textLight, size: 14),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
@@ -450,7 +420,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
                       style: const TextStyle(
                         fontFamily: AppStyles.bubblyFont,
                         fontSize: 12,
-                        color: Colors.white70,
+                        color: AppColors.textLight,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -467,77 +437,33 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
   Widget _buildActionButtons() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40),
-      child: Column(
-        children: [
-          // STOP button — big, prominent
-          GestureDetector(
-            onTap: _stopAlarm,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.alarm_off_rounded,
-                      color: AppColors.textDark, size: 24),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Stop Alarm',
-                    style: TextStyle(
-                      fontFamily: AppStyles.bubblyFont,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      child: GestureDetector(
+        onTap: _stopAlarm,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          decoration: AppStyles.funkyButtonDecoration(
+            color: AppColors.primaryPink,
+            borderRadius: 24,
           ),
-          const SizedBox(height: 14),
-
-          // SNOOZE button — secondary
-          GestureDetector(
-            onTap: _snoozeAlarm,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white54, width: 1.5),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.alarm_off_rounded,
+                  color: AppColors.textDark, size: 24),
+              const SizedBox(width: 10),
+              const Text(
+                'Stop Alarm',
+                style: TextStyle(
+                  fontFamily: AppStyles.bubblyFont,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.snooze_rounded,
-                      color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Snooze 10 min',
-                    style: TextStyle(
-                      fontFamily: AppStyles.bubblyFont,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
