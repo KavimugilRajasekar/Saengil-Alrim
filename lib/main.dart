@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'providers/birthday_provider.dart';
-import 'utils/styles.dart';
-import 'views/home_view.dart';
-
+import 'services/birthday_service.dart';
 import 'services/notification_service.dart';
+import 'widgets/app_styles.dart';
+import 'screens/home_screen.dart';
 
 void main() async {
-  // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize notification settings and local timezone scheduling
   await NotificationService().init();
-  
   runApp(const MyApp());
 }
 
@@ -44,7 +39,7 @@ class MyApp extends StatelessWidget {
             iconTheme: IconThemeData(color: AppColors.textDark),
           ),
         ),
-        home: const HomeView(),
+        home: const HomeScreen(),
       ),
     );
   }

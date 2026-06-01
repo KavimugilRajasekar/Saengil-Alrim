@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import '../utils/styles.dart';
+import '../widgets/app_styles.dart';
 
 class ConfettiOverlay extends StatefulWidget {
   final Widget child;
