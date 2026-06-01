@@ -9,6 +9,7 @@ import '../widgets/app_styles.dart';
 import '../widgets/birthday_card.dart';
 import '../widgets/funky_calendar.dart';
 import 'add_birthday_screen.dart';
+import 'saved_birthdays_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,6 +53,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _permissionsChecked = true;
       });
     }
+  }
+
+  void _showSavedBirthdaysSheet(BuildContext context) {
+    final sheetController = DraggableScrollableController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        controller: sheetController,
+        initialChildSize: 0.4,
+        minChildSize: 0.0,
+        maxChildSize: 1.0,
+        snap: true,
+        snapSizes: const [0.0, 1.0],
+        expand: false,
+        builder: (context, scrollController) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            sheetController.animateTo(
+              1.0,
+              duration: const Duration(milliseconds: 380),
+              curve: Curves.easeOutCubic,
+            );
+          });
+          return SavedBirthdaysSheet(scrollController: scrollController);
+        },
+      ),
+    );
   }
 
   void _showAddBirthdaySheet(BuildContext context) {
@@ -106,32 +136,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBg,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.accentBorder, width: 2.0),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.accentBorder.withValues(alpha: 0.15),
-                          offset: const Offset(3, 3),
-                          blurRadius: 0,
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(4.0),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/icon/saengil_alrim_logo.png',
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, e, st) => Container(
+                  GestureDetector(
+                    onTap: () => _showSavedBirthdaysSheet(context),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBg,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.accentBorder, width: 2.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.accentBorder.withValues(alpha: 0.15),
+                            offset: const Offset(3, 3),
+                            blurRadius: 0,
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(4.0),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/icon/saengil_alrim_logo.png',
                           width: 50,
                           height: 50,
-                          color: AppColors.primaryPink,
-                          alignment: Alignment.center,
-                          child: const Text('🎂', style: TextStyle(fontSize: 26)),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, e, st) => Container(
+                            width: 50,
+                            height: 50,
+                            color: AppColors.primaryPink,
+                            alignment: Alignment.center,
+                            child: const Text('🎂', style: TextStyle(fontSize: 26)),
+                          ),
                         ),
                       ),
                     ),

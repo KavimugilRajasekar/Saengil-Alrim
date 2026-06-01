@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/birthday_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/app_styles.dart';
 import '../widgets/cute_sticker.dart';
 
@@ -153,6 +154,10 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
   // ── Stop alarm ─────────────────────────────────────────────────
   Future<void> _stopAlarm() async {
     await Alarm.stop(widget.alarmSettings.id);
+    // Reschedule for next year so the alarm repeats annually
+    if (widget.birthday != null) {
+      await NotificationService().scheduleBirthdayAlarms(widget.birthday!);
+    }
     if (mounted) Navigator.of(context).pop();
   }
 

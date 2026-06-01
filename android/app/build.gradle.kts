@@ -24,7 +24,7 @@ android {
         applicationId = "com.example.saengil_alrim"
         // alarm package requires minSdk 21. Explicit values avoid
         // surprises when Flutter defaults change between versions.
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName

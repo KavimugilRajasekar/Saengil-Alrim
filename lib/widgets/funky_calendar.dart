@@ -45,7 +45,16 @@ class _FunkyCalendarState extends State<FunkyCalendar> {
 
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    return Container(
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity == null) return;
+        if (details.primaryVelocity! < -200) {
+          _nextMonth();
+        } else if (details.primaryVelocity! > 200) {
+          _previousMonth();
+        }
+      },
+      child: Container(
       padding: const EdgeInsets.all(16.0),
       decoration: AppStyles.journalPageDecoration,
       child: Column(
@@ -198,7 +207,8 @@ class _FunkyCalendarState extends State<FunkyCalendar> {
           ),
         ],
       ),
-    );
+    ), // closes Container
+    ); // closes GestureDetector
   }
 
   Widget _navButton(IconData icon, VoidCallback onTap) {
