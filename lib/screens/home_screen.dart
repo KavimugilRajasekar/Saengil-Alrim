@@ -10,11 +10,22 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   void _showAddBirthdaySheet(BuildContext context) {
+    final provider = Provider.of<BirthdayProvider>(context, listen: false);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      enableDrag: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const AddBirthdayScreen(),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 1.0,
+        minChildSize: 0.0,
+        maxChildSize: 1.0,
+        snap: true,
+        snapSizes: const [0.0, 1.0],
+        expand: false,
+        builder: (context, scrollController) =>
+            AddBirthdayScreen(initialDate: provider.selectedDate),
+      ),
     );
   }
 

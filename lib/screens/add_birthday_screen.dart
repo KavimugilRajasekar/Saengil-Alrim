@@ -8,8 +8,9 @@ import '../widgets/app_styles.dart';
 import '../widgets/cute_sticker.dart';
 
 class AddBirthdayScreen extends StatefulWidget {
-  const AddBirthdayScreen({super.key, this.birthdayToEdit});
+  const AddBirthdayScreen({super.key, this.birthdayToEdit, this.initialDate});
   final FriendBirthday? birthdayToEdit;
+  final DateTime? initialDate;
 
   @override
   State<AddBirthdayScreen> createState() => _AddBirthdayScreenState();
@@ -93,6 +94,9 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       _advanceAlarmTime = _parseTime(b.advanceAlarmTimeStr);
       _selectedAdvanceRingtonePath = b.advanceRingtonePath;
       _selectedAdvanceRingtoneName = b.advanceRingtoneName;
+    } else if (widget.initialDate != null) {
+      _selectedMonth = widget.initialDate!.month;
+      _selectedDay = widget.initialDate!.day;
     }
     _saveButtonController = AnimationController(
       vsync: this,

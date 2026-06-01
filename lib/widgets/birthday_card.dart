@@ -44,10 +44,12 @@ class _BirthdayCardState extends State<BirthdayCard>
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
         _controller.reverse();
-        Navigator.of(context).push(
-          CuteRouteTransition(
-            page: BirthdayDetailScreen(birthdayId: b.id),
-          ),
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) =>
+              BirthdayDetailSheet(birthdayId: b.id),
         );
       },
       onTapCancel: () => _controller.reverse(),
