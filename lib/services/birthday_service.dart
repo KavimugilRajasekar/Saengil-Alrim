@@ -192,6 +192,25 @@ class BirthdayProvider with ChangeNotifier {
     return sorted;
   }
 
+  /// Birthdays in the current month and the next month, sorted by date.
+  List<FriendBirthday> get twoMonthBirthdays {
+    final now = DateTime.now();
+    final thisMonth = now.month;
+    final nextMonth = thisMonth == 12 ? 1 : thisMonth + 1;
+
+    final filtered = _birthdays
+        .where((b) => b.month == thisMonth || b.month == nextMonth)
+        .toList();
+
+    // Sort: current month first (by day), then next month (by day)
+    filtered.sort((a, b) {
+      if (a.month == b.month) return a.day.compareTo(b.day);
+      if (a.month == thisMonth) return -1;
+      return 1;
+    });
+    return filtered;
+  }
+
   Future<void> loadBirthdays() async {
     _isLoading = true;
     notifyListeners();

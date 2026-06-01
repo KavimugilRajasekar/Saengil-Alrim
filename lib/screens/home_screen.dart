@@ -147,32 +147,40 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 24.0),
 
               // ── Upcoming Birthdays ──
-              Row(
-                children: [
-                  const Text('🎁', style: TextStyle(fontSize: 20.0)),
-                  const SizedBox(width: 6.0),
-                  Text(
-                    'Upcoming Birthdays',
-                    style: AppStyles.titleHandwritten.copyWith(fontSize: 20.0),
-                  ),
-                ],
-              ),
+              Builder(builder: (context) {
+                final now = DateTime.now();
+                final thisMonthName = kMonthNamesShort[now.month - 1];
+                final nextMonthName =
+                    kMonthNamesShort[now.month == 12 ? 0 : now.month];
+                return Row(
+                  children: [
+                    const Icon(Icons.cake_rounded,
+                        size: 20.0, color: AppColors.textDark),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      '$thisMonthName & $nextMonthName Birthdays',
+                      style:
+                          AppStyles.titleHandwritten.copyWith(fontSize: 20.0),
+                    ),
+                  ],
+                );
+              }),
               const SizedBox(height: 12.0),
 
               if (provider.isLoading)
                 const Center(child: CircularProgressIndicator())
-              else if (provider.birthdays.isEmpty)
+              else if (provider.twoMonthBirthdays.isEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 24.0),
                     child: Text(
-                      'No birthdays registered yet! Tap + to add.',
+                      'No birthdays this month or next.',
                       style: AppStyles.captionBubbly,
                     ),
                   ),
                 )
               else
-                ...provider.upcomingBirthdays
+                ...provider.twoMonthBirthdays
                     .map((b) => BirthdayCard(birthday: b)),
 
               const SizedBox(height: 80.0),
