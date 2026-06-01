@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/birthday_task.dart';
 import '../models/friend_birthday.dart';
 import '../services/notification_service.dart';
 
@@ -98,47 +97,6 @@ class BirthdayProvider with ChangeNotifier {
     notifyListeners();
     await saveBirthdaysToPrefs();
     await NotificationService().cancelBirthdayAlarms(id);
-  }
-
-  // Toggle state of a task
-  Future<void> toggleTask(String birthdayId, String taskId) async {
-    final birthdayIndex = _birthdays.indexWhere((b) => b.id == birthdayId);
-    if (birthdayIndex != -1) {
-      final birthday = _birthdays[birthdayIndex];
-      final taskIndex = birthday.tasks.indexWhere((t) => t.id == taskId);
-
-      if (taskIndex != -1) {
-        birthday.tasks[taskIndex].isCompleted = !birthday.tasks[taskIndex].isCompleted;
-        notifyListeners();
-        await saveBirthdaysToPrefs();
-      }
-    }
-  }
-
-  // Add task to a birthday
-  Future<void> addTask(String birthdayId, String taskTitle) async {
-    final index = _birthdays.indexWhere((b) => b.id == birthdayId);
-    if (index != -1) {
-      final birthday = _birthdays[index];
-      final newTask = BirthdayTask(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: taskTitle,
-        isCompleted: false,
-      );
-      birthday.tasks.add(newTask);
-      notifyListeners();
-      await saveBirthdaysToPrefs();
-    }
-  }
-
-  // Delete task from a birthday
-  Future<void> deleteTask(String birthdayId, String taskId) async {
-    final index = _birthdays.indexWhere((b) => b.id == birthdayId);
-    if (index != -1) {
-      _birthdays[index].tasks.removeWhere((t) => t.id == taskId);
-      notifyListeners();
-      await saveBirthdaysToPrefs();
-    }
   }
 
   // Reschedule all alarms to keep them synced with actual local time

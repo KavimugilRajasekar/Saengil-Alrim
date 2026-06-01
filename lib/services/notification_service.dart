@@ -1,3 +1,4 @@
+import 'package:alarm/alarm.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -11,6 +12,7 @@ class NotificationService {
   NotificationService._internal();
 
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  final Alarm alarm = Alarm();
 
   Future<void> init() async {
     // 1. Initialize time zones
@@ -49,6 +51,9 @@ class NotificationService {
 
     // 3. Request permissions explicitly for Android 13+
     _requestAndroidPermissions();
+
+    // 4. Initialize alarm package
+    await Alarm.init();
   }
 
   Future<void> _requestAndroidPermissions() async {

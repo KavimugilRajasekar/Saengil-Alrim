@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../models/birthday_task.dart';
 import '../models/friend_birthday.dart';
 import '../providers/birthday_provider.dart';
 import '../utils/styles.dart';
@@ -245,11 +244,6 @@ class _AddBirthdayViewState extends State<AddBirthdayView> with TickerProviderSt
       // Determine if we are editing or adding
       final isEditing = widget.birthdayToEdit != null;
       final String id = isEditing ? widget.birthdayToEdit!.id : DateTime.now().millisecondsSinceEpoch.toString();
-      final List<BirthdayTask> tasks = isEditing ? widget.birthdayToEdit!.tasks : [
-        BirthdayTask(id: 't_init_1', title: 'Buy a cute gift 🎁', isCompleted: false),
-        BirthdayTask(id: 't_init_2', title: 'Write a warm handwritten card 💌', isCompleted: false),
-        BirthdayTask(id: 't_init_3', title: 'Order matching birthday cake 🎂', isCompleted: false),
-      ];
 
       final updatedBirthday = FriendBirthday(
         id: id,
@@ -259,7 +253,6 @@ class _AddBirthdayViewState extends State<AddBirthdayView> with TickerProviderSt
         birthYear: year,
         sticker: _selectedSticker,
         notes: _notesController.text.trim(),
-        tasks: tasks,
         avatarColorIndex: _selectedColorIndex,
         enableDDayAlarm: _enableDDayAlarm,
         enableThreeDaysAlarm: _enableReminderAlarm,

@@ -182,55 +182,6 @@ class _BirthdayCardState extends State<BirthdayCard> with SingleTickerProviderSt
                   ),
                 ),
               ],
-              // Preparation Tasks Progress Bar
-              if (b.tasks.isNotEmpty) ...[
-                const SizedBox(height: 14.0),
-                const Divider(color: AppColors.accentBorder, thickness: 1.5),
-                const SizedBox(height: 6.0),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Preparation checklist',
-                      style: AppStyles.captionBubbly.copyWith(
-                        color: AppColors.textDark,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      '${b.tasks.where((t) => t.isCompleted).length}/${b.tasks.length} Done',
-                      style: AppStyles.captionBubbly.copyWith(
-                        color: AppColors.textDark,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6.0),
-                // Custom bubbly progress bar
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10.0),
-                  child: Container(
-                    height: 10.0,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.accentBorder.withValues(alpha: 0.1),
-                      border: Border.all(color: AppColors.accentBorder, width: 1.5),
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: b.taskProgress,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.pastelMint,
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

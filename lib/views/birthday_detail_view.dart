@@ -18,11 +18,9 @@ class BirthdayDetailView extends StatefulWidget {
 }
 
 class _BirthdayDetailViewState extends State<BirthdayDetailView> {
-  final _taskController = TextEditingController();
   late TextEditingController _notesController;
   bool _isEditingNotes = false;
 
-  double _lastProgress = 0.0;
   bool _triggerConfetti = false;
   bool _hasBurstedOnBirthday = false;
 
@@ -35,7 +33,6 @@ class _BirthdayDetailViewState extends State<BirthdayDetailView> {
 
   @override
   void dispose() {
-    _taskController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -108,24 +105,6 @@ class _BirthdayDetailViewState extends State<BirthdayDetailView> {
     if (!_isEditingNotes) {
       _notesController.text = b.notes;
     }
-
-    // Trigger confetti on 100% completion
-    final double currentProgress = b.taskProgress;
-    if (currentProgress == 1.0 && _lastProgress < 1.0 && b.tasks.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _triggerConfetti = true;
-        });
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            setState(() {
-              _triggerConfetti = false;
-            });
-          }
-        });
-      });
-    }
-    _lastProgress = currentProgress;
 
     // Trigger confetti on birthday load
     if (b.isToday && !_hasBurstedOnBirthday) {
@@ -297,231 +276,6 @@ class _BirthdayDetailViewState extends State<BirthdayDetailView> {
                           fontSize: 14.0,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24.0),
-
-              // Checklist Section
-              Text(
-                'Preparation Checklist',
-                style: AppStyles.titleHandwritten.copyWith(fontSize: 20.0),
-              ),
-              const SizedBox(height: 10.0),
-              Container(
-                padding: const EdgeInsets.all(16.0),
-                decoration: AppStyles.funkyCardDecoration(
-                  color: AppColors.cardBg,
-                  borderRadius: 20.0,
-                ),
-                child: Column(
-                  children: [
-                    // Progress display
-                    if (b.tasks.isNotEmpty) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Prep Progress',
-                            style: AppStyles.captionBubbly.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '${(b.taskProgress * 100).toInt()}% Done',
-                            style: AppStyles.captionBubbly.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryPink,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8.0),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10.0),
-                        child: Container(
-                          height: 10.0,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: AppColors.accentBorder.withValues(
-                              alpha: 0.1,
-                            ),
-                            border: Border.all(
-                              color: AppColors.accentBorder,
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(10.0),
-                          ),
-                          alignment: Alignment.centerLeft,
-                          child: FractionallySizedBox(
-                            widthFactor: b.taskProgress,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.pastelMint,
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16.0),
-                      const Divider(
-                        color: AppColors.accentBorder,
-                        thickness: 1.5,
-                      ),
-                    ],
-
-                    // Task items list
-                    if (b.tasks.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16.0),
-                        child: Text(
-                          'No prep tasks yet! Add some below',
-                          style: AppStyles.captionBubbly.copyWith(
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      )
-                    else
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: b.tasks.length,
-                        itemBuilder: (context, idx) {
-                          final task = b.tasks[idx];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6.0),
-                            child: Row(
-                              children: [
-                                // Funky custom checkbox
-                                GestureDetector(
-                                  onTap: () =>
-                                      provider.toggleTask(b.id, task.id),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: task.isCompleted
-                                          ? AppColors.pastelMint
-                                          : Colors.white,
-                                      borderRadius: BorderRadius.circular(6.0),
-                                      border: Border.all(
-                                        color: AppColors.accentBorder,
-                                        width: 2.0,
-                                      ),
-                                    ),
-                                    child: task.isCompleted
-                                        ? const Icon(
-                                            Icons.check_rounded,
-                                            size: 18.0,
-                                            color: AppColors.textDark,
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                                const SizedBox(width: 12.0),
-                                // Task Title
-                                Expanded(
-                                  child: Text(
-                                    task.title,
-                                    style: AppStyles.bodyBubbly.copyWith(
-                                      decoration: task.isCompleted
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                      color: task.isCompleted
-                                          ? AppColors.textLight
-                                          : AppColors.textDark,
-                                      fontWeight: task.isCompleted
-                                          ? FontWeight.normal
-                                          : FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                // Delete task icon
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    color: Colors.grey,
-                                    size: 20.0,
-                                  ),
-                                  onPressed: () =>
-                                      provider.deleteTask(b.id, task.id),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-
-                    const SizedBox(height: 12.0),
-                    // Add Task Input Row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _taskController,
-                            style: AppStyles.captionBubbly.copyWith(
-                              color: AppColors.textDark,
-                              fontSize: 13.0,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Add new preparation step...',
-                              hintStyle: AppStyles.captionBubbly.copyWith(
-                                fontSize: 12.0,
-                              ),
-                              fillColor: AppColors.creamBg,
-                              filled: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12.0,
-                                vertical: 8.0,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10.0),
-                                borderSide: const BorderSide(
-                                  color: AppColors.accentBorder,
-                                  width: 1.5,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10.0),
-                                borderSide: const BorderSide(
-                                  color: AppColors.accentBorder,
-                                  width: 2.0,
-                                ),
-                              ),
-                            ),
-                            onSubmitted: (val) {
-                              if (val.trim().isNotEmpty) {
-                                provider.addTask(b.id, val.trim());
-                                _taskController.clear();
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        IconButton(
-                          onPressed: () {
-                            if (_taskController.text.trim().isNotEmpty) {
-                              provider.addTask(
-                                b.id,
-                                _taskController.text.trim(),
-                              );
-                              _taskController.clear();
-                            }
-                          },
-                          icon: const Icon(
-                            Icons.add_circle_outline_rounded,
-                            color: AppColors.primaryPink,
-                            size: 30.0,
-                          ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
                     ),
                   ],
                 ),

@@ -1,5 +1,3 @@
-import 'birthday_task.dart';
-
 class FriendBirthday {
   final String id;
   final String name;
@@ -8,7 +6,6 @@ class FriendBirthday {
   final int? birthYear;
   final String sticker;
   final String notes;
-  final List<BirthdayTask> tasks;
   final int avatarColorIndex;
   final bool enableDDayAlarm;
   final bool enableThreeDaysAlarm; // Serves as the advance reminder toggle
@@ -30,7 +27,6 @@ class FriendBirthday {
     this.birthYear,
     required this.sticker,
     this.notes = '',
-    required this.tasks,
     required this.avatarColorIndex,
     this.enableDDayAlarm = true,
     this.enableThreeDaysAlarm = true,
@@ -87,12 +83,6 @@ class FriendBirthday {
     return targetYear - birthYear!;
   }
 
-  double get taskProgress {
-    if (tasks.isEmpty) return 0.0;
-    final completed = tasks.where((t) => t.isCompleted).length;
-    return completed / tasks.length;
-  }
-
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -102,7 +92,6 @@ class FriendBirthday {
       'birthYear': birthYear,
       'sticker': sticker,
       'notes': notes,
-      'tasks': tasks.map((t) => t.toJson()).toList(),
       'avatarColorIndex': avatarColorIndex,
       'enableDDayAlarm': enableDDayAlarm,
       'enableThreeDaysAlarm': enableThreeDaysAlarm,
@@ -117,7 +106,6 @@ class FriendBirthday {
   }
 
   factory FriendBirthday.fromJson(Map<String, dynamic> json) {
-    var rawTasks = json['tasks'] as List? ?? [];
     return FriendBirthday(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -126,7 +114,6 @@ class FriendBirthday {
       birthYear: json['birthYear'] as int?,
       sticker: json['sticker'] as String? ?? '🎂',
       notes: json['notes'] as String? ?? '',
-      tasks: rawTasks.map((t) => BirthdayTask.fromJson(t as Map<String, dynamic>)).toList(),
       avatarColorIndex: json['avatarColorIndex'] as int? ?? 0,
       enableDDayAlarm: json['enableDDayAlarm'] as bool? ?? true,
       enableThreeDaysAlarm: json['enableThreeDaysAlarm'] as bool? ?? true,
@@ -148,7 +135,6 @@ class FriendBirthday {
     int? birthYear,
     String? sticker,
     String? notes,
-    List<BirthdayTask>? tasks,
     int? avatarColorIndex,
     bool? enableDDayAlarm,
     bool? enableThreeDaysAlarm,
@@ -168,7 +154,6 @@ class FriendBirthday {
       birthYear: birthYear ?? this.birthYear,
       sticker: sticker ?? this.sticker,
       notes: notes ?? this.notes,
-      tasks: tasks ?? this.tasks,
       avatarColorIndex: avatarColorIndex ?? this.avatarColorIndex,
       enableDDayAlarm: enableDDayAlarm ?? this.enableDDayAlarm,
       enableThreeDaysAlarm: enableThreeDaysAlarm ?? this.enableThreeDaysAlarm,
