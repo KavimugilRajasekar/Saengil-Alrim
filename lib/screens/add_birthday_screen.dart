@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/birthday_service.dart';
 import '../widgets/app_styles.dart';
 import '../widgets/cute_sticker.dart';
@@ -26,7 +27,6 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
   String _selectedSticker = 'assets/sticker/birthday-cake.png';
   int _selectedColorIndex = 0;
 
-  // Alarm state — kept as plain fields, toggled via setState
   bool _enableDDayAlarm = true;
   bool _enableReminderAlarm = true;
   int _reminderDays = 3;
@@ -38,6 +38,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
   String? _selectedAdvanceRingtoneName;
 
   late AnimationController _saveButtonController;
+  late FixedExtentScrollController _monthScrollController;
+  late FixedExtentScrollController _dayScrollController;
 
   static const List<String> _assetStickers = [
     'assets/sticker/birthday-cake.png',
@@ -70,12 +72,6 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     'assets/sticker/glasses.png',
   ];
 
-  static const List<Map<String, String>> _ringtones = [
-    {'name': 'Default Bell', 'path': 'chime'},
-    {'name': 'Fairy Dust', 'path': 'fairy'},
-    {'name': 'Music Box', 'path': 'music_box'},
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -104,13 +100,18 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       lowerBound: 0.0,
       upperBound: 0.06,
     );
+    _monthScrollController =
+        FixedExtentScrollController(initialItem: _selectedMonth - 1);
+    _dayScrollController =
+        FixedExtentScrollController(initialItem: _selectedDay - 1);
   }
 
   TimeOfDay _parseTime(String timeStr) {
     try {
       final parts = timeStr.split(':');
       if (parts.length == 2) {
-        return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+        return TimeOfDay(
+            hour: int.parse(parts[0]), minute: int.parse(parts[1]));
       }
     } catch (_) {}
     return const TimeOfDay(hour: 9, minute: 0);
@@ -122,6 +123,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     _notesController.dispose();
     _yearController.dispose();
     _saveButtonController.dispose();
+    _monthScrollController.dispose();
+    _dayScrollController.dispose();
     super.dispose();
   }
 
@@ -134,6 +137,30 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
       maxHeight: 512,
     );
     if (picked != null) setState(() => _selectedSticker = picked.path);
+  }
+
+  /// Pick a ringtone / audio file from device storage.
+  Future<void> _pickRingtone({required bool isDDay}) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: false,
+    );
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+      final path = file.path;
+      final name = file.name.replaceAll(RegExp(r'\.[^.]+$'), '');
+      if (path != null) {
+        setState(() {
+          if (isDDay) {
+            _selectedDDayRingtonePath = path;
+            _selectedDDayRingtoneName = name;
+          } else {
+            _selectedAdvanceRingtonePath = path;
+            _selectedAdvanceRingtoneName = name;
+          }
+        });
+      }
+    }
   }
 
   String _formatTimeOfDay(TimeOfDay tod) =>
@@ -178,8 +205,20 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
   }
 
   void _saveBirthday() {
-    _saveButtonController.forward().then((_) => _saveButtonController.reverse());
+    _saveButtonController
+        .forward()
+        .then((_) => _saveButtonController.reverse());
     if (!_formKey.currentState!.validate()) return;
+
+    // Require at least one ringtone when alarms are enabled
+    if (_enableDDayAlarm && _selectedDDayRingtonePath == null) {
+      _showRingtoneRequiredDialog('Birthday Alarm');
+      return;
+    }
+    if (_enableReminderAlarm && _selectedAdvanceRingtonePath == null) {
+      _showRingtoneRequiredDialog('Advance Reminder');
+      return;
+    }
 
     final provider = Provider.of<BirthdayProvider>(context, listen: false);
     final isEditing = widget.birthdayToEdit != null;
@@ -222,7 +261,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${_nameController.text.trim()}\'s Birthday ${isEditing ? 'updated' : 'saved'}! 🥳',
+          '${_nameController.text.trim()}\'s Birthday ${isEditing ? 'updated' : 'saved'}',
           style: const TextStyle(fontFamily: AppStyles.bubblyFont),
         ),
         backgroundColor: AppColors.primaryPink,
@@ -235,15 +274,57 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     );
   }
 
+  void _showRingtoneRequiredDialog(String alarmType) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: AppColors.creamBg,
+        title: Text(
+          'Ringtone Required',
+          style: AppStyles.bodyBubblyBold.copyWith(fontSize: 16),
+        ),
+        content: Text(
+          'Please select a ringtone for the $alarmType before saving.',
+          style: AppStyles.bodyBubbly,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('OK',
+                style: AppStyles.bodyBubblyBold
+                    .copyWith(color: AppColors.primaryPink)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Helpers ──
 
-  Widget _sectionLabel(String text) => Text(
-        text,
-        style: AppStyles.bodyBubblyBold.copyWith(
-          fontSize: 14.0,
-          color: AppColors.textDark,
-          letterSpacing: 0.3,
-        ),
+  Widget _sectionLabel(String text, IconData icon) => Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.primaryPink,
+              borderRadius: BorderRadius.circular(8),
+              border:
+                  Border.all(color: AppColors.accentBorder, width: 1.5),
+            ),
+            child: Icon(icon, size: 15, color: AppColors.textDark),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: AppStyles.bodyBubblyBold.copyWith(
+              fontSize: 14.0,
+              color: AppColors.textDark,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       );
 
   InputDecoration _inputDecoration({required String hintText}) =>
@@ -274,48 +355,211 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
         ),
       );
 
-  // ── Ringtone row ──
-  Widget _ringtoneRow({
-    required String? selectedPath,
-    required void Function(String path, String name) onSelect,
-  }) {
-    return Row(
-      children: _ringtones.map((rt) {
-        final isSel = selectedPath == rt['path'];
-        return Expanded(
-          child: GestureDetector(
-            onTap: () => onSelect(rt['path']!, rt['name']!),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              decoration: BoxDecoration(
-                color: isSel ? AppColors.secondaryApricot : AppColors.creamBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isSel
-                      ? AppColors.accentBorder
-                      : AppColors.accentBorder.withValues(alpha: 0.4),
-                  width: 1.5,
+  // ── Circle Date Selector ──
+  Widget _buildCircleDateSelector() {
+    final maxDays = DateTime(DateTime.now().year, _selectedMonth + 1, 0).day;
+
+    return Container(
+      height: 160,
+      decoration: AppStyles.funkyCardDecoration(
+          color: AppColors.cardBg, borderRadius: 18.0),
+      child: Row(
+        children: [
+          // Month wheel
+          Expanded(
+            flex: 3,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Selection highlight
+                Center(
+                  child: Container(
+                    height: 44,
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryPink.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppColors.accentBorder, width: 1.5),
+                    ),
+                  ),
                 ),
-              ),
+                ListWheelScrollView.useDelegate(
+                  controller: _monthScrollController,
+                  itemExtent: 44,
+                  perspective: 0.003,
+                  diameterRatio: 1.8,
+                  physics: const FixedExtentScrollPhysics(),
+                  onSelectedItemChanged: (idx) {
+                    setState(() {
+                      _selectedMonth = idx + 1;
+                      final newMax =
+                          DateTime(DateTime.now().year, _selectedMonth + 1, 0)
+                              .day;
+                      if (_selectedDay > newMax) {
+                        _selectedDay = newMax;
+                        _dayScrollController.jumpToItem(_selectedDay - 1);
+                      }
+                    });
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: 12,
+                    builder: (context, idx) {
+                      final isSelected = _selectedMonth == idx + 1;
+                      return Center(
+                        child: Text(
+                          kMonthNamesFull[idx],
+                          style: AppStyles.bodyBubbly.copyWith(
+                            fontSize: isSelected ? 14 : 12,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: isSelected
+                                ? AppColors.textDark
+                                : AppColors.textLight,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Divider
+          Container(
+            width: 1.5,
+            height: 100,
+            color: AppColors.accentBorder.withValues(alpha: 0.3),
+          ),
+          // Day wheel
+          Expanded(
+            flex: 1,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Center(
+                  child: Container(
+                    height: 44,
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryPink.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppColors.accentBorder, width: 1.5),
+                    ),
+                  ),
+                ),
+                ListWheelScrollView.useDelegate(
+                  controller: _dayScrollController,
+                  itemExtent: 44,
+                  perspective: 0.003,
+                  diameterRatio: 1.8,
+                  physics: const FixedExtentScrollPhysics(),
+                  onSelectedItemChanged: (idx) {
+                    setState(() => _selectedDay = idx + 1);
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: maxDays,
+                    builder: (context, idx) {
+                      final isSelected = _selectedDay == idx + 1;
+                      return Center(
+                        child: Text(
+                          '${idx + 1}',
+                          style: AppStyles.bodyBubbly.copyWith(
+                            fontSize: isSelected ? 16 : 13,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: isSelected
+                                ? AppColors.textDark
+                                : AppColors.textLight,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Ringtone picker row ──
+  Widget _ringtonePickerRow({
+    required String? selectedPath,
+    required String? selectedName,
+    required bool isDDay,
+  }) {
+    final hasRingtone = selectedPath != null;
+    return GestureDetector(
+      onTap: () => _pickRingtone(isDDay: isDDay),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: hasRingtone
+              ? AppColors.pastelMint
+              : AppColors.secondaryApricot,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasRingtone
+                ? AppColors.accentBorder
+                : AppColors.accentBorder.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              hasRingtone
+                  ? Icons.music_note_rounded
+                  : Icons.music_off_rounded,
+              size: 20,
+              color: AppColors.textDark,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(isSel ? '🔔' : '🔕',
-                      style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 2),
                   Text(
-                    rt['name']!,
-                    textAlign: TextAlign.center,
-                    style: AppStyles.captionBubbly
-                        .copyWith(fontSize: 9, color: AppColors.textDark),
+                    hasRingtone ? selectedName! : 'No ringtone selected',
+                    style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    hasRingtone
+                        ? 'Tap to change'
+                        : 'Tap to pick from device',
+                    style: AppStyles.captionBubbly,
                   ),
                 ],
               ),
             ),
-          ),
-        );
-      }).toList(),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.cardBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppColors.accentBorder, width: 1.5),
+              ),
+              child: Text(
+                hasRingtone ? 'Change' : 'Select',
+                style: AppStyles.captionBubbly.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -331,7 +575,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isDDay ? 'D-Day Alarm Time ⏰' : 'Reminder Alarm Time ⏰',
+                  isDDay ? 'Alarm Time' : 'Reminder Time',
                   style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0),
                 ),
                 Text('Tap to change', style: AppStyles.captionBubbly),
@@ -340,11 +584,13 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.pastelMint,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.accentBorder, width: 1.5),
+              border:
+                  Border.all(color: AppColors.accentBorder, width: 1.5),
             ),
             child: Text(
               _formatDisplayTime(time),
@@ -414,105 +660,32 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                   const SizedBox(width: 12),
                   Text(
                     widget.birthdayToEdit != null
-                        ? 'Edit Birthday ✏️'
-                        : 'New Birthday ✨',
-                    style:
-                        AppStyles.titleHandwritten.copyWith(fontSize: 22.0),
+                        ? 'Edit Birthday'
+                        : 'New Birthday',
+                    style: AppStyles.titleHandwritten
+                        .copyWith(fontSize: 22.0),
                   ),
                 ],
               ),
               const SizedBox(height: 24.0),
 
               // ── Name ──
-              _sectionLabel('Friend\'s Name ✏️'),
+              _sectionLabel('Name', Icons.person_outline_rounded),
               const SizedBox(height: 8.0),
               TextFormField(
                 controller: _nameController,
                 style: AppStyles.bodyBubbly,
-                decoration: _inputDecoration(hintText: 'e.g. Ji-soo 🌸'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Please enter a name!' : null,
+                decoration: _inputDecoration(hintText: 'e.g. Ji-soo'),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Please enter a name'
+                    : null,
               ),
               const SizedBox(height: 20.0),
 
               // ── Date ──
-              _sectionLabel('Birthday Date 🗓️'),
+              _sectionLabel('Birthday Date', Icons.calendar_today_rounded),
               const SizedBox(height: 8.0),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12.0),
-                      decoration: AppStyles.funkyCardDecoration(
-                          color: AppColors.cardBg, borderRadius: 14.0),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _selectedMonth,
-                          isExpanded: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                              color: AppColors.textDark),
-                          dropdownColor: AppColors.cardBg,
-                          style: AppStyles.bodyBubblyBold,
-                          items: List.generate(12, (i) => i + 1).map((m) {
-                            return DropdownMenuItem<int>(
-                              value: m,
-                              child: Text(kMonthNamesFull[m - 1]),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _selectedMonth = val;
-                                final maxDays = DateTime(
-                                        DateTime.now().year, val + 1, 0)
-                                    .day;
-                                if (_selectedDay > maxDays) {
-                                  _selectedDay = maxDays;
-                                }
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12.0),
-                      decoration: AppStyles.funkyCardDecoration(
-                          color: AppColors.cardBg, borderRadius: 14.0),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _selectedDay,
-                          isExpanded: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                              size: 16, color: AppColors.textDark),
-                          dropdownColor: AppColors.cardBg,
-                          style: AppStyles.bodyBubblyBold,
-                          items: List.generate(
-                                  DateTime(DateTime.now().year,
-                                          _selectedMonth + 1, 0)
-                                      .day,
-                                  (i) => i + 1)
-                              .map((d) => DropdownMenuItem<int>(
-                                  value: d, child: Text('$d')))
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedDay = val);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              _buildCircleDateSelector(),
               const SizedBox(height: 14.0),
               TextFormField(
                 controller: _yearController,
@@ -524,7 +697,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                   if (v != null && v.isNotEmpty) {
                     final y = int.tryParse(v);
                     if (y == null || y < 1900 || y > DateTime.now().year) {
-                      return 'Enter a valid year!';
+                      return 'Enter a valid year';
                     }
                   }
                   return null;
@@ -533,7 +706,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
               const SizedBox(height: 20.0),
 
               // ── Card Colour ──
-              _sectionLabel('Card Colour 🎨'),
+              _sectionLabel('Card Colour', Icons.palette_outlined),
               const SizedBox(height: 10.0),
               SizedBox(
                 height: 44,
@@ -544,7 +717,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                     final c = AppColors.getRandomPastel(i);
                     final isSel = _selectedColorIndex == i;
                     return GestureDetector(
-                      onTap: () => setState(() => _selectedColorIndex = i),
+                      onTap: () =>
+                          setState(() => _selectedColorIndex = i),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 150),
                         margin: const EdgeInsets.only(right: 10),
@@ -580,7 +754,7 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
               const SizedBox(height: 20.0),
 
               // ── Sticker Picker ──
-              _sectionLabel('Birthday Sticker 🩷'),
+              _sectionLabel('Birthday Sticker', Icons.emoji_emotions_outlined),
               const SizedBox(height: 10.0),
               Container(
                 height: 168,
@@ -604,7 +778,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                         duration: const Duration(milliseconds: 120),
                         decoration: BoxDecoration(
                           color: isSel
-                              ? AppColors.getRandomPastel(_selectedColorIndex)
+                              ? AppColors.getRandomPastel(
+                                      _selectedColorIndex)
                                   .withValues(alpha: 0.5)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10.0),
@@ -660,21 +835,20 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
               const SizedBox(height: 20.0),
 
               // ── Alarms & Reminders ──
-              _sectionLabel('Alarms & Reminders 🔔'),
+              _sectionLabel('Alarms & Reminders', Icons.alarm_rounded),
               const SizedBox(height: 10.0),
               _buildAlarmSection(),
               const SizedBox(height: 20.0),
 
               // ── Notes ──
-              _sectionLabel('Gift Ideas & Notes 💌'),
+              _sectionLabel('Gift Ideas & Notes', Icons.edit_note_rounded),
               const SizedBox(height: 8.0),
               TextFormField(
                 controller: _notesController,
                 maxLines: 2,
                 style: AppStyles.bodyBubbly,
                 decoration: _inputDecoration(
-                    hintText:
-                        'e.g. Loves ribbons, wants a skin-care set...'),
+                    hintText: 'e.g. Loves ribbons, wants a skin-care set...'),
               ),
               const SizedBox(height: 28.0),
 
@@ -702,15 +876,14 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('🎂', style: TextStyle(fontSize: 22)),
+                        const Icon(Icons.cake_rounded,
+                            color: AppColors.textDark, size: 22),
                         const SizedBox(width: 10),
                         Text(
                           'Save Birthday',
-                          style: AppStyles.titleHandwritten
-                              .copyWith(fontSize: 20.0, color: AppColors.textDark),
+                          style: AppStyles.titleHandwritten.copyWith(
+                              fontSize: 20.0, color: AppColors.textDark),
                         ),
-                        const SizedBox(width: 10),
-                        const Text('🎀', style: TextStyle(fontSize: 22)),
                       ],
                     ),
                   ),
@@ -732,12 +905,12 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
     );
   }
 
-  // ── Alarm section — extracted to its own method so setState rebuilds it cleanly ──
+  // ── Alarm section ──
   Widget _buildAlarmSection() {
     return Container(
       padding: const EdgeInsets.all(16.0),
-      decoration:
-          AppStyles.funkyCardDecoration(color: AppColors.cardBg, borderRadius: 18.0),
+      decoration: AppStyles.funkyCardDecoration(
+          color: AppColors.cardBg, borderRadius: 18.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -749,50 +922,53 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Birthday Alarm 🎂',
-                        style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
-                    Text('Fires at alarm time on the actual day',
+                    Text('Birthday Alarm',
+                        style: AppStyles.bodyBubblyBold
+                            .copyWith(fontSize: 13.0)),
+                    Text('Fires on the actual birthday',
                         style: AppStyles.captionBubbly),
                   ],
                 ),
               ),
-              // FIX: wrap Switch in Material so it gets its own hit-test zone
-              // and is not swallowed by any ancestor GestureDetector.
               Material(
                 color: Colors.transparent,
                 child: Switch(
                   value: _enableDDayAlarm,
                   activeThumbColor: AppColors.pastelLavender,
                   activeTrackColor: AppColors.primaryPink,
-                  onChanged: (v) {
-                    setState(() => _enableDDayAlarm = v);
-                  },
+                  onChanged: (v) => setState(() => _enableDDayAlarm = v),
                 ),
               ),
             ],
           ),
 
           if (_enableDDayAlarm) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _timeChip(_dDayAlarmTime, isDDay: true),
-            const SizedBox(height: 8),
-            Text('D-Day Ringtone 🎵',
+            const SizedBox(height: 10),
+            Text('Ringtone',
                 style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
-            const SizedBox(height: 8),
-            _ringtoneRow(
+            const SizedBox(height: 6),
+            _ringtonePickerRow(
               selectedPath: _selectedDDayRingtonePath,
-              onSelect: (path, name) => setState(() {
-                _selectedDDayRingtonePath = path;
-                _selectedDDayRingtoneName = name;
-              }),
+              selectedName: _selectedDDayRingtoneName,
+              isDDay: true,
             ),
             if (_selectedDDayRingtonePath == null)
               Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Text(
-                  'No ringtone selected (system default)',
-                  style: AppStyles.captionBubbly
-                      .copyWith(fontStyle: FontStyle.italic),
+                padding: const EdgeInsets.only(top: 5.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 13, color: Colors.redAccent),
+                    const SizedBox(width: 4),
+                    Text(
+                      'A ringtone is required to save',
+                      style: AppStyles.captionBubbly.copyWith(
+                          color: Colors.redAccent,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -809,8 +985,9 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Advance Reminder 🎁',
-                        style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
+                    Text('Advance Reminder',
+                        style: AppStyles.bodyBubblyBold
+                            .copyWith(fontSize: 13.0)),
                     Text('Remind me days before birthday',
                         style: AppStyles.captionBubbly),
                   ],
@@ -822,9 +999,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                   value: _enableReminderAlarm,
                   activeThumbColor: AppColors.pastelLavender,
                   activeTrackColor: AppColors.primaryPink,
-                  onChanged: (v) {
-                    setState(() => _enableReminderAlarm = v);
-                  },
+                  onChanged: (v) =>
+                      setState(() => _enableReminderAlarm = v),
                 ),
               ),
             ],
@@ -838,11 +1014,12 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                 Text(
                   'Days before:',
                   style: AppStyles.captionBubbly.copyWith(
-                      fontWeight: FontWeight.bold, color: AppColors.textDark),
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.pastelLavender,
                     borderRadius: BorderRadius.circular(20),
@@ -853,7 +1030,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                     _reminderDays == 0
                         ? 'Same day'
                         : '$_reminderDays day${_reminderDays > 1 ? 's' : ''}',
-                    style: AppStyles.bodyBubblyBold.copyWith(fontSize: 12),
+                    style:
+                        AppStyles.bodyBubblyBold.copyWith(fontSize: 12),
                   ),
                 ),
               ],
@@ -864,7 +1042,8 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                 inactiveTrackColor:
                     AppColors.primaryPink.withValues(alpha: 0.3),
                 thumbColor: AppColors.pastelLavender,
-                overlayColor: AppColors.pastelLavender.withValues(alpha: 0.2),
+                overlayColor:
+                    AppColors.pastelLavender.withValues(alpha: 0.2),
                 thumbShape:
                     const RoundSliderThumbShape(enabledThumbRadius: 10),
                 trackHeight: 4,
@@ -874,29 +1053,36 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
                 min: 0,
                 max: 14,
                 divisions: 14,
-                onChanged: (v) => setState(() => _reminderDays = v.round()),
+                onChanged: (v) =>
+                    setState(() => _reminderDays = v.round()),
               ),
             ),
             const SizedBox(height: 8),
             _timeChip(_advanceAlarmTime, isDDay: false),
-            const SizedBox(height: 8),
-            Text('Reminder Ringtone 🎵',
+            const SizedBox(height: 10),
+            Text('Ringtone',
                 style: AppStyles.bodyBubblyBold.copyWith(fontSize: 13.0)),
-            const SizedBox(height: 8),
-            _ringtoneRow(
+            const SizedBox(height: 6),
+            _ringtonePickerRow(
               selectedPath: _selectedAdvanceRingtonePath,
-              onSelect: (path, name) => setState(() {
-                _selectedAdvanceRingtonePath = path;
-                _selectedAdvanceRingtoneName = name;
-              }),
+              selectedName: _selectedAdvanceRingtoneName,
+              isDDay: false,
             ),
             if (_selectedAdvanceRingtonePath == null)
               Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Text(
-                  'No ringtone selected (system default)',
-                  style: AppStyles.captionBubbly
-                      .copyWith(fontStyle: FontStyle.italic),
+                padding: const EdgeInsets.only(top: 5.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 13, color: Colors.redAccent),
+                    const SizedBox(width: 4),
+                    Text(
+                      'A ringtone is required to save',
+                      style: AppStyles.captionBubbly.copyWith(
+                          color: Colors.redAccent,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
                 ),
               ),
           ],
