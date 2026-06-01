@@ -80,7 +80,7 @@ class NotificationService {
                 volume: 1.0,
               ),
               notificationSettings: NotificationSettings(
-                title: '🎂 Birthday Today!',
+                title: 'Birthday Today!',
                 body: "It's ${birthday.name}'s birthday! Show them some love 💕",
                 stopButton: 'Stop',
               ),
