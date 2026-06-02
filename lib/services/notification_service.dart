@@ -13,11 +13,12 @@ import 'birthday_service.dart';
 /// [BirthdayProvider._resolveRingtonePaths] before saving.
 ///
 /// KEY SETTINGS:
-/// - androidStopAlarmOnTermination = false  → alarm keeps ringing
-///   even when the user swipes the app away from recents.
-/// - androidFullScreenIntent = false        → we intentionally do NOT
-///   launch over the lock screen. main.dart detects lock state and
-///   defers the ring UI until the device is unlocked.
+/// - androidFullScreenIntent = true         → required for the AlarmService
+///   to post a high-priority notification and start audio reliably on all
+///   Android versions. The Dart layer (main.dart) controls whether the ring
+///   screen appears immediately or is deferred until the device is unlocked.
+/// - androidStopAlarmOnTermination = false  → alarm keeps ringing even when
+///   the user swipes the app away from recents.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -95,9 +96,13 @@ class NotificationService {
               assetAudioPath: audioPath,
               loopAudio: true,
               vibrate: true,
-              // Do NOT use androidFullScreenIntent — we handle the ring UI
-              // ourselves in main.dart, deferred until the device is unlocked.
-              androidFullScreenIntent: false,
+              // androidFullScreenIntent: true is required for the AlarmService
+              // to post a high-priority notification and start audio reliably
+              // on all Android versions — including when the app is open.
+              // The Dart layer (main.dart) decides whether to show the ring
+              // screen immediately or defer it until the device is unlocked.
+              androidFullScreenIntent: true,
+              // Keep ringing even when the user swipes the app away from recents.
               androidStopAlarmOnTermination: false,
               warningNotificationOnKill: Platform.isIOS,
               volumeSettings: VolumeSettings.fade(
@@ -163,9 +168,10 @@ class NotificationService {
               assetAudioPath: audioPath,
               loopAudio: true,
               vibrate: true,
-              // Do NOT use androidFullScreenIntent — ring UI is deferred
-              // until device is unlocked (handled in main.dart).
-              androidFullScreenIntent: false,
+              // androidFullScreenIntent: true required for reliable notification
+              // + audio on all Android versions. The Dart layer handles whether
+              // to show the ring screen immediately or defer until unlock.
+              androidFullScreenIntent: true,
               androidStopAlarmOnTermination: false,
               warningNotificationOnKill: Platform.isIOS,
               volumeSettings: VolumeSettings.fade(
