@@ -57,7 +57,9 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
 
     // Force portrait, keep screen on
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Use edgeToEdge instead of immersiveSticky — immersiveSticky can cause
+    // the lock screen to draw on top on some OEM skins (Samsung One UI).
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
     // Clock ticker
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {

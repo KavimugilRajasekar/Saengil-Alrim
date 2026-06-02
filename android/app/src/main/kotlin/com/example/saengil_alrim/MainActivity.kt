@@ -2,6 +2,7 @@ package com.example.saengil_alrim
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -69,15 +70,30 @@ class MainActivity : FlutterActivity() {
                         pendingAlarmPayload = null // consume once
                     }
 
+                    // ── Device locked state ───────────────────────
+                    // Flutter calls this to check if the keyguard is currently
+                    // locked so it can defer the ring UI until the user unlocks.
+                    "isDeviceLocked" -> {
+                        val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                        result.success(km.isKeyguardLocked)
+                    }
+
+                    // ── OEM manufacturer (for OEM-specific battery tips) ──
+                    "getManufacturer" ->
+                        result.success(Build.MANUFACTURER.lowercase())
+
+                    // ── Open OEM-specific battery/autostart settings ──────
+                    "openOemBatterySettings" -> {
+                        openOemBatterySettings()
+                        result.success(null)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // NOTE: Do NOT set showWhenLocked / turnScreenOn here unconditionally.
-        // The alarm package's AlarmPlugin.notificationObserver handles this
-        // correctly via AlarmRingingLiveData when an alarm is actually ringing.
         super.onCreate(savedInstanceState)
 
         // Capture payload from the intent that launched this activity
@@ -98,20 +114,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Activity is already running (singleTop) and user tapped the alarm
-        // notification. Apply lock-screen flags so the ring screen shows.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            )
-        }
-        // Also capture payload for the new intent (app running, notification tapped)
+        // Capture payload for the new intent (app running, notification tapped).
         extractAlarmPayload(intent)
     }
 
@@ -196,6 +199,85 @@ class MainActivity : FlutterActivity() {
                         data = Uri.parse("package:$packageName")
                     }
                 )
+            } catch (_: Exception) {}
+        }
+    }
+
+    // ── OEM-specific battery / autostart settings ─────────────────
+
+    private fun openOemBatterySettings() {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val intent: Intent? = when {
+            manufacturer.contains("xiaomi") -> runCatching {
+                Intent("miui.intent.action.APP_PERM_EDITOR").apply {
+                    setClassName(
+                        "com.miui.securitycenter",
+                        "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                    )
+                }
+            }.getOrNull()
+            manufacturer.contains("huawei") || manufacturer.contains("honor") ->
+                runCatching {
+                    Intent().apply {
+                        setClassName(
+                            "com.huawei.systemmanager",
+                            "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+                        )
+                    }
+                }.getOrNull()
+            manufacturer.contains("samsung") -> runCatching {
+                Intent().apply {
+                    component = android.content.ComponentName(
+                        "com.samsung.android.lool",
+                        "com.samsung.android.sm.battery.ui.BatteryActivity"
+                    )
+                }
+            }.getOrNull()
+            manufacturer.contains("oppo") -> runCatching {
+                Intent().apply {
+                    setClassName(
+                        "com.coloros.safecenter",
+                        "com.coloros.safecenter.permission.startup.FakeActivity"
+                    )
+                }
+            }.getOrNull()
+            manufacturer.contains("vivo") -> runCatching {
+                Intent().apply {
+                    setClassName(
+                        "com.vivo.permissionmanager",
+                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
+                    )
+                }
+            }.getOrNull()
+            manufacturer.contains("oneplus") -> runCatching {
+                Intent().apply {
+                    setClassName(
+                        "com.oneplus.security",
+                        "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity"
+                    )
+                }
+            }.getOrNull()
+            else -> null
+        }
+
+        try {
+            if (intent != null) {
+                startActivity(intent)
+                return
+            }
+        } catch (_: Exception) {}
+
+        // Fallback: standard battery optimization settings
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             } catch (_: Exception) {}
         }
     }

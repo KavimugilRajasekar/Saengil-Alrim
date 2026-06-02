@@ -251,6 +251,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   },
                 ),
 
+              if (_missingPermissions.contains(MissingPermission.oemBatterySettings))
+                _OemBatteryBanner(
+                  permissionService: PermissionService(),
+                  onDismissed: _checkPermissions,
+                ),
+
               if (_missingPermissions.isNotEmpty) const SizedBox(height: 8),
 
               // ── Calendar ─────────────────────────────────────────
@@ -451,6 +457,125 @@ class _PermissionBanner extends StatelessWidget {
                 size: 14, color: borderColor),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── OEM battery settings banner ───────────────────────────────────────────────
+// Shown on Xiaomi, Samsung, Huawei, Oppo, Vivo, OnePlus devices where the
+// standard battery optimization exemption is not enough — these OEMs have
+// additional proprietary "autostart" or "background app" managers that
+// silently kill the AlarmService before it can fire.
+//
+// Since there is no Android API to detect whether autostart is enabled,
+// the user dismisses this banner manually with the × button once they have
+// completed the step. The dismissal is persisted in SharedPreferences.
+class _OemBatteryBanner extends StatefulWidget {
+  final PermissionService permissionService;
+  /// Called after the user dismisses so the parent can re-check permissions.
+  final VoidCallback onDismissed;
+
+  const _OemBatteryBanner({
+    required this.permissionService,
+    required this.onDismissed,
+  });
+
+  @override
+  State<_OemBatteryBanner> createState() => _OemBatteryBannerState();
+}
+
+class _OemBatteryBannerState extends State<_OemBatteryBanner> {
+  String _label = 'Autostart / Background Settings';
+
+  @override
+  void initState() {
+    super.initState();
+    widget.permissionService.oemBatterySettingsLabel().then((label) {
+      if (mounted) setState(() => _label = label);
+    });
+  }
+
+  Future<void> _openSettings() async {
+    await widget.permissionService.openOemBatterySettings();
+  }
+
+  Future<void> _dismiss() async {
+    await widget.permissionService.dismissOemBanner();
+    widget.onDismissed();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE6A817), width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(Icons.phone_android_rounded,
+                color: Color(0xFFE6A817), size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              onTap: _openSettings,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Enable Autostart / Background Access',
+                          style: AppStyles.bodyBubblyBold.copyWith(
+                            fontSize: 13,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                      // Small arrow hint
+                      const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 13, color: Color(0xFFE6A817)),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Your device ($_label) may silently block background '
+                    'alarms. Tap here to open the setting and allow this app '
+                    'to run in the background, then tap × when done.',
+                    style: AppStyles.captionBubbly.copyWith(
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Dismiss button — clearly separated from the settings tap area
+          GestureDetector(
+            onTap: _dismiss,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE6A817).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close_rounded,
+                  size: 16, color: Color(0xFFB87A00)),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,7 +1,3 @@
-// app_styles.dart
-// Combines: utils/styles.dart + utils/cute_route_transition.dart
-// All design tokens, colors, text styles, decorations, and route transition.
-
 import 'package:flutter/material.dart';
 
 // ─────────────────────────────────────────────

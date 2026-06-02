@@ -69,8 +69,6 @@
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -86,11 +84,9 @@
 
         <!--
         AlarmService: the foreground service that plays audio and shows
-        the full-screen notification. stopWithTask="false" keeps it alive
-        even when the user swipes the app away from recents.
-        Note: showWhenLocked/turnScreenOn are Activity-only attributes and
-        have no effect on a Service — the AlarmPlugin handles lock-screen
-        visibility via AlarmRingingLiveData on the Activity side.
+        the notification. stopWithTask="false" keeps it alive even when
+        the user swipes the app away from recents. The ring UI is shown
+        by main.dart once the device is unlocked (not over the lock screen).
         -->
         <service
             android:name="com.gdelataillade.alarm.alarm.AlarmService"

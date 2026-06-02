@@ -4,11 +4,54 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart';
+
+// ─────────────────────────────────────────────
+// STICKER CONSTANTS
+// ─────────────────────────────────────────────
+
+/// All sticker asset paths bundled with the app.
+/// This is the single source of truth — referenced by the add-birthday
+/// screen picker AND used as the random fallback for imported entries.
+const List<String> kAllStickers = [
+  'assets/sticker/birthday-cake.png',
+  'assets/sticker/birthday-cake_1.png',
+  'assets/sticker/cake.png',
+  'assets/sticker/cake_1.png',
+  'assets/sticker/cake_2.png',
+  'assets/sticker/cake_3.png',
+  'assets/sticker/cupcake.png',
+  'assets/sticker/pie.png',
+  'assets/sticker/cat.png',
+  'assets/sticker/chick.png',
+  'assets/sticker/koala.png',
+  'assets/sticker/penguin.png',
+  'assets/sticker/monkey.png',
+  'assets/sticker/mouse.png',
+  'assets/sticker/elephant.png',
+  'assets/sticker/giraffe.png',
+  'assets/sticker/crocodile.png',
+  'assets/sticker/dinosaur.png',
+  'assets/sticker/dinosaur_1.png',
+  'assets/sticker/stegosaurus.png',
+  'assets/sticker/crow.png',
+  'assets/sticker/jellyfish.png',
+  'assets/sticker/flower.png',
+  'assets/sticker/flower-pot.png',
+  'assets/sticker/tulips.png',
+  'assets/sticker/magic.png',
+  'assets/sticker/drawing.png',
+  'assets/sticker/glasses.png',
+];
+
+/// Returns a random sticker path from [kAllStickers].
+String randomSticker() =>
+    kAllStickers[Random().nextInt(kAllStickers.length)];
 
 // ─────────────────────────────────────────────
 // MODEL
@@ -109,7 +152,7 @@ class FriendBirthday {
         month: json['month'] as int,
         day: json['day'] as int,
         birthYear: json['birthYear'] as int?,
-        sticker: json['sticker'] as String? ?? '🎂',
+        sticker: json['sticker'] as String? ?? randomSticker(),
         notes: json['notes'] as String? ?? '',
         avatarColorIndex: json['avatarColorIndex'] as int? ?? 0,
         enableDDayAlarm: json['enableDDayAlarm'] as bool? ?? true,

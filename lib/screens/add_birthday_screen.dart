@@ -344,29 +344,15 @@ class _AddBirthdayScreenState extends State<AddBirthdayScreen>
 
   // ── Helpers ──
 
-  Widget _sectionLabel(String text, IconData icon) => Row(
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: AppColors.primaryPink,
-              borderRadius: BorderRadius.circular(8),
-              border:
-                  Border.all(color: AppColors.accentBorder, width: 1.5),
-            ),
-            child: Icon(icon, size: 15, color: AppColors.textDark),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: AppStyles.bodyBubblyBold.copyWith(
-              fontSize: 14.0,
-              color: AppColors.textDark,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
+  Widget _sectionLabel(String text, IconData icon) => Text(
+        text,
+        style: const TextStyle(
+          fontFamily: AppStyles.handwritingFont,
+          fontSize: 20.0,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textDark,
+          letterSpacing: 0.1,
+        ),
       );
 
   InputDecoration _inputDecoration({required String hintText}) =>

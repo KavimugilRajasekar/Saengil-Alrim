@@ -6,8 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'birthday_service.dart';
 
 /// Handles scheduling and cancelling birthday alarms using the
-/// [alarm] package, which provides full-screen alarm UI support
-/// and plays the user-selected ringtone file.
+/// [alarm] package, which provides foreground-service audio playback.
 ///
 /// Audio paths arriving here are already resolved to internal
 /// storage relative paths (e.g. "alarm_audio/dday_123.mp3") by
@@ -16,8 +15,9 @@ import 'birthday_service.dart';
 /// KEY SETTINGS:
 /// - androidStopAlarmOnTermination = false  → alarm keeps ringing
 ///   even when the user swipes the app away from recents.
-/// - androidFullScreenIntent = true         → wakes screen and
-///   shows full-screen alarm UI.
+/// - androidFullScreenIntent = false        → we intentionally do NOT
+///   launch over the lock screen. main.dart detects lock state and
+///   defers the ring UI until the device is unlocked.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -95,8 +95,9 @@ class NotificationService {
               assetAudioPath: audioPath,
               loopAudio: true,
               vibrate: true,
-              androidFullScreenIntent: true,
-              // CRITICAL: keep ringing even when app is swiped away
+              // Do NOT use androidFullScreenIntent — we handle the ring UI
+              // ourselves in main.dart, deferred until the device is unlocked.
+              androidFullScreenIntent: false,
               androidStopAlarmOnTermination: false,
               warningNotificationOnKill: Platform.isIOS,
               volumeSettings: VolumeSettings.fade(
@@ -162,7 +163,9 @@ class NotificationService {
               assetAudioPath: audioPath,
               loopAudio: true,
               vibrate: true,
-              androidFullScreenIntent: true,
+              // Do NOT use androidFullScreenIntent — ring UI is deferred
+              // until device is unlocked (handled in main.dart).
+              androidFullScreenIntent: false,
               androidStopAlarmOnTermination: false,
               warningNotificationOnKill: Platform.isIOS,
               volumeSettings: VolumeSettings.fade(

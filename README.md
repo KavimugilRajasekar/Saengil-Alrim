@@ -1,6 +1,8 @@
 # 생일알림 · saengil alrim
 
-> A Flutter birthday alarm app that wakes your phone with full-screen UI and plays your chosen music — even when the app is completely closed.
+> A Flutter birthday alarm app — adds a friend's birthday once, rings with your chosen music when the day arrives, and waits politely until you unlock your phone before showing the alarm screen.
+
+**Version:** 1.0.1+2 · **Platform:** Android 5.0+ (API 21+) · **Flutter:** 3.41+ / Dart 3.11+
 
 ---
 
@@ -8,508 +10,442 @@
 
 1. [What This App Does](#1-what-this-app-does)
 2. [Android Compatibility](#2-android-compatibility)
-3. [How the App Works — Complete Flow](#3-how-the-app-works--complete-flow)
-4. [Every Change Made and Why](#4-every-change-made-and-why)
-5. [File-by-File Breakdown](#5-file-by-file-breakdown)
-6. [Permissions Explained](#6-permissions-explained)
+3. [Complete Flow](#3-complete-flow)
+4. [Lock-Screen Behavior](#4-lock-screen-behavior)
+5. [Cloud Sync](#5-cloud-sync)
+6. [Permissions](#6-permissions)
 7. [Audio File Handling](#7-audio-file-handling)
-8. [Alarm Screen UI](#8-alarm-screen-ui)
-9. [Project Structure](#9-project-structure)
+8. [Alarm Scheduling Logic](#8-alarm-scheduling-logic)
+9. [File-by-File Breakdown](#9-file-by-file-breakdown)
 10. [Dependencies](#10-dependencies)
 11. [Getting Started](#11-getting-started)
+12. [Fonts & Stickers](#12-fonts--stickers)
 
 ---
 
 ## 1. What This App Does
 
-You add a friend's birthday once. The app remembers it forever and wakes your phone at the right time — even if the app is closed, the screen is off, or the phone was restarted.
+Add a friend's birthday once. The app remembers it and rings at the exact time you set — even if the app is closed, the screen is off, or the phone restarted.
 
 **Two alarms per birthday:**
 
-- **Birthday Alarm (D-Day)** — fires on the actual birthday at your chosen time
-- **Advance Reminder** — fires N days before the birthday (you pick 0–14 days)
+| Alarm | When it fires |
+|---|---|
+| **Birthday Alarm (D-Day)** | On the actual birthday at your chosen time |
+| **Advance Reminder** | N days before the birthday (0–14 days, your choice) |
 
-Each alarm has its own:
-- Time of day
-- Ringtone (any audio file from your device)
-- On/Off toggle
+Each alarm has its own time, ringtone (any audio file from your device), and on/off toggle.
 
-When an alarm fires, a **full-screen alarm UI** appears over the lock screen showing the person's name, sticker, birthday message, and gift notes. Your chosen music plays and loops until you tap **Stop Alarm**.
+**When an alarm fires while you are using your phone**, a full-screen ring screen appears with the person's name, sticker, birthday message, and gift notes. Your music plays and loops until you tap **Stop Alarm**.
+
+**When an alarm fires while your phone is locked**, the audio plays in the background. The ring screen appears the moment you unlock — nothing is missed and nothing interrupts your sleep.
 
 ---
 
 ## 2. Android Compatibility
 
-| Android Version | API Level | Works? | Notes |
-|---|---|---|---|
-| Android 5.0 Lollipop | 21 | ✅ | Minimum supported version |
-| Android 6.0 Marshmallow | 23 | ✅ | Battery optimization dialog available |
-| Android 7 / 8 | 24–27 | ✅ | Full support |
-| Android 9 Pie | 28 | ✅ | Foreground service permission required |
-| Android 10 | 29 | ✅ | Full-screen intent available |
-| Android 11 | 30 | ✅ | Full support |
-| Android 12 / 12L | 31–32 | ✅ | Exact alarm granted by default at install |
-| Android 13 | 33 | ✅ | `USE_EXACT_ALARM` auto-granted, `POST_NOTIFICATIONS` required |
-| Android 14 | 34 | ✅ | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` required |
-| Android 15+ | 35+ | ✅ | Tested with Flutter 3.41 / targetSdk 35 |
+| Android | API | Notes |
+|---|---|---|
+| 5.0 Lollipop | 21 | Minimum supported |
+| 6.0 Marshmallow | 23 | Battery optimization dialog available |
+| 7 / 8 | 24–27 | Full support |
+| 9 Pie | 28 | Foreground service required |
+| 10 | 29 | Full support |
+| 11 / 12 / 12L | 30–32 | Exact alarm granted by default at install |
+| 13 | 33 | `USE_EXACT_ALARM` auto-granted, `POST_NOTIFICATIONS` required at runtime |
+| 14+ | 34+ | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` required |
 
-**OEM devices (Samsung, Xiaomi, Huawei, OnePlus, Oppo, Vivo):**
-These brands add their own battery killers on top of Android. The app asks for battery optimization exemption on first launch. Without it, the alarm service may be killed before it rings on these devices. Once granted, it works reliably.
+**OEM devices (Samsung, Xiaomi, Huawei, OnePlus, Oppo, Vivo, Realme):**
+These manufacturers add proprietary battery managers that can kill background services even when battery optimization is disabled. On first launch the app requests standard battery optimization exemption. A persistent banner on the home screen also guides you to your device's specific autostart settings (MIUI Autostart, Samsung Battery, Huawei App Launch, etc.). Once you confirm that setting and dismiss the banner, it never shows again.
 
-**Stock Android (Google Pixel, Android One):**
-Works without any extra steps.
+**Stock Android (Pixel, Android One):** Works without any extra steps.
 
 ---
 
-## 3. How the App Works — Complete Flow
+## 3. Complete Flow
 
 ### 3.1 Adding a Birthday
 
 ```
-User opens app → taps + button
-        ↓
-AddBirthdayScreen opens as a bottom sheet
-        ↓
-User fills in:
-  • Name
-  • Birthday date (month + day wheel picker)
-  • Birth year (optional, for age calculation)
-  • Sticker (28 built-in or pick from gallery)
-  • Card colour (6 pastel options)
-  • Birthday Alarm → toggle ON/OFF → pick time → pick ringtone
-  • Advance Reminder → toggle ON/OFF → pick days before → pick time → pick ringtone
-  • Gift ideas / notes
-        ↓
-User taps Save Birthday
-        ↓
-BirthdayProvider.addBirthday() is called
-        ↓
-Audio files are COPIED to internal storage
-(so they're always readable even when app is closed)
-        ↓
-Birthday is saved to SharedPreferences as JSON
-        ↓
-NotificationService.scheduleBirthdayAlarms() is called
-        ↓
-Alarm.set() registers two exact alarms with Android's AlarmManager
-        ↓
-Done — alarms are now scheduled at the OS level
+Tap + → AddBirthdayScreen opens as a bottom sheet
+         │
+         ├─ Name (PlaywriteUSModern bold label)
+         ├─ Birthday Date — month + day wheel picker
+         ├─ Birth Year — optional, enables age display
+         ├─ Card Colour — 6 pastel options
+         ├─ Birthday Sticker — 28 built-in PNGs, or pick from gallery
+         │                     Sticker is randomly assigned when importing
+         │                     from cloud sync (no hardcoded 🎂 emoji)
+         ├─ Birthday Alarm
+         │   ├─ Toggle ON/OFF
+         │   ├─ Pick alarm time
+         │   └─ Pick ringtone (audio file from device)
+         ├─ Advance Reminder
+         │   ├─ Toggle ON/OFF
+         │   ├─ Days before (1–14, slider)
+         │   ├─ Pick reminder time
+         │   └─ Pick ringtone
+         └─ Gift Ideas & Notes (freeform text)
+                  │
+                  ▼
+         BirthdayProvider.addBirthday()
+                  │
+         Audio files copied to internal storage
+         (ensures they are always readable by the alarm service)
+                  │
+         Saved to SharedPreferences as JSON
+                  │
+         NotificationService.scheduleBirthdayAlarms()
+         → Alarm.set() registers two exact alarms with Android AlarmManager
 ```
 
-### 3.2 What Happens When the Alarm Fires (App Closed)
+### 3.2 When an Alarm Fires (App Closed, Device Unlocked)
 
 ```
-Phone reaches the scheduled date and time
-        ↓
-Android's AlarmManager fires — no app process needed
-        ↓
-AlarmReceiver (BroadcastReceiver) receives the broadcast
-        ↓
-AlarmReceiver starts AlarmService as a Foreground Service
-        ↓
-AlarmService:
-  • Acquires a WAKE_LOCK (keeps CPU awake)
-  • Requests audio focus
-  • Plays the audio file from internal storage
-  • Starts vibration
-  • Shows a full-screen notification over the lock screen
-  • Calls back into Flutter via platform channel
-        ↓
-Flutter's Alarm.ringing stream emits the alarm
-        ↓
-main.dart listener receives it
-        ↓
-Reads the birthday from SharedPreferences using the alarm payload (birthday ID)
-        ↓
-Pushes AlarmRingScreen via the global NavigatorKey
-        ↓
-Full-screen alarm UI appears with:
-  • Live clock
-  • Person's sticker (pulsing animation)
-  • Expanding ring waves
-  • Confetti particles
-  • Name, birthday message, gift notes
-  • Stop Alarm button
-        ↓
-User taps Stop Alarm
-        ↓
-Alarm.stop() is called → audio stops, vibration stops, screen returns to normal
+AlarmManager fires at scheduled time
+        │
+AlarmReceiver (BroadcastReceiver) starts AlarmService
+        │
+AlarmService (Foreground Service):
+  · Acquires WAKE_LOCK
+  · Plays audio from internal storage
+  · Vibrates
+  · Shows a notification
+        │
+Flutter's Alarm.ringing BehaviorSubject emits the alarm
+        │
+main.dart checks: is device locked?
+        │
+        NO → push AlarmRingScreen immediately
 ```
 
-### 3.3 After Device Reboot
+### 3.3 When an Alarm Fires While Device is Locked
 
 ```
-Phone restarts
-        ↓
-Android sends BOOT_COMPLETED broadcast
-        ↓
+AlarmManager fires
+        │
+AlarmService starts → audio plays in background (user hears it)
+        │
+main.dart checks: is device locked?
+        │
+        YES → alarm added to _pendingLockedAlarms queue
+              (audio keeps playing, nothing shown on screen)
+        │
+User unlocks device → AppLifecycleState.resumed fires
+        │
+_onResumed() flushes the queue
+        │
+AlarmRingScreen pushed → user sees ring screen immediately after unlock
+```
+
+### 3.4 After Device Reboot
+
+```
+Phone restarts → BOOT_COMPLETED broadcast
+        │
 BootReceiver receives it
-        ↓
-Reads all saved alarms from AlarmStorage
-        ↓
-Re-registers each alarm with AlarmManager
-        ↓
-All alarms are restored — nothing is lost
+        │
+All saved alarms re-registered with AlarmManager
+        │
+Nothing is lost
 ```
 
-### 3.4 App Launch — Reschedule on Every Open
+### 3.5 Stop Alarm
 
 ```
-App opens → main() runs
-        ↓
-NotificationService.init() → Alarm.init()
-        ↓
-Alarm.init() calls checkAlarm() internally
-        ↓
-BirthdayProvider loads all birthdays from SharedPreferences
-        ↓
-_rescheduleAllAlarms() loops through every birthday
-        ↓
-scheduleBirthdayAlarms() is called for each one
-        ↓
-Any alarm whose time has passed is automatically rolled to next year
+User taps Stop Alarm
+        │
+Alarm.stop(id) → audio stops, vibration stops
+        │
+NotificationService.scheduleBirthdayAlarmsAfter()
+→ rolls that alarm to its next future occurrence
+  (D-Day → next year; Advance → recalculated from next year's D-Day)
+        │
+Navigator.pop() → returns to normal app
 ```
 
 ---
 
-## 4. Every Change Made and Why
+## 4. Lock-Screen Behavior
 
-### 4.1 The Original Problem
+This is the core design decision that separates this app from a typical alarm app.
 
-The original app had the `alarm` package installed but **never used it**. All scheduling went through `flutter_local_notifications.zonedSchedule()` which only shows a banner notification — it cannot wake the device, play a custom file, or show a full-screen UI. The user-picked ringtone path was saved but never passed to any audio API.
+**Why not show a full-screen UI over the lock screen?**
 
----
+Most alarm apps use `FLAG_TURN_SCREEN_ON` + `FLAG_SHOW_WHEN_LOCKED` to forcibly wake and display over the keyguard. This is unreliable across the hundreds of Android OEM variants — PIN/pattern locks block interaction, Samsung One UI draws on top, and the behavior differs between API levels.
 
-### 4.2 `AndroidManifest.xml` — Complete Rewrite
+**What this app does instead:**
 
-**Before:** Only had basic activity declaration. Wrong service class name (`dev.fluttercommunity.plus.androidalarm.AlarmService` — this class does not exist). Missing `AlarmReceiver`, `BootReceiver`, and most permissions.
-
-**After — every addition explained:**
-
-| Addition | Why |
+| Phase | What happens |
 |---|---|
-| `RECEIVE_BOOT_COMPLETED` | Without this, all alarms are lost after reboot |
-| `WAKE_LOCK` | Keeps CPU awake while alarm is ringing |
-| `USE_FULL_SCREEN_INTENT` | Shows alarm UI over the lock screen |
-| `FOREGROUND_SERVICE` | Required to run AlarmService in foreground (API 28+) |
+| Alarm fires, phone locked | Audio plays via foreground service. App detects locked state via `KeyguardManager.isKeyguardLocked`. Ring UI deferred. |
+| User unlocks phone | `AppLifecycleState.resumed` fires. Deferred alarms flushed. Ring screen pushed. |
+| Alarm fires, phone unlocked | Ring screen shown immediately as usual. |
+
+The audio is the alert. The screen is the interaction. They are decoupled.
+
+**Technical implementation:**
+
+- `androidFullScreenIntent: false` in `AlarmSettings` — we do not ask the package to handle lock-screen presentation
+- `showWhenLocked` / `turnScreenOn` attributes removed from `AndroidManifest.xml`
+- `applyLockScreenFlags()` removed from `MainActivity.kt`
+- New `isDeviceLocked` MethodChannel call in `MainActivity.kt` returns `KeyguardManager.isKeyguardLocked`
+- `_pendingLockedAlarms` list in `main.dart` holds deferred alarms until resume
+
+**Deduplication guard:**
+
+Every alarm ID is added to `_handledAlarmIds` the moment it is first seen (before any `await`), preventing race conditions when the BehaviorSubject replays, the 1-second retry fires, or `_onResumed` flushes — all potentially running concurrently.
+
+---
+
+## 5. Cloud Sync
+
+Birthdays can be backed up and shared between devices using Firebase Realtime Database.
+
+### Data isolation
+
+Every device gets a permanent random UUID generated once and stored in SharedPreferences as `cloud_user_id`. All cloud data lives at:
+
+```
+/birthdays/<userId>/
+```
+
+No two users ever share a node. Pushing from one device never affects another device's data.
+
+### Push
+
+Uploads the current device's birthdays to its own private cloud node. Replaces the node entirely with the current local state.
+
+### Get (import from a friend)
+
+1. Tap **Get** → enter a **Sync Code** (the other device's `cloud_user_id`)
+2. The app fetches that user's node
+3. Only entries not already on your device (by ID) are shown
+4. You select which ones to import → they are added locally with randomly assigned stickers and colour index 0
+
+### Your Sync Code
+
+Shown on the Cloud Sync sheet. Tap **Copy** to share it with a friend. It is a UUID v4 string, e.g.:
+
+```
+3f4a12b8-9c2e-4d1f-a7b3-0e5f8d2c6a91
+```
+
+### What is synced
+
+Only: `id`, `name`, `month`, `day`, `birthYear`, `notes`. Ringtone paths, sticker, colour, and alarm settings are device-local and are not uploaded.
+
+---
+
+## 6. Permissions
+
+### Full list and why each is needed
+
+| Permission | Why |
+|---|---|
+| `RECEIVE_BOOT_COMPLETED` | Re-register alarms after device restart |
+| `VIBRATE` | Vibrate when alarm fires |
+| `WAKE_LOCK` | Keep CPU awake while alarm service is running |
+| `USE_FULL_SCREEN_INTENT` | Required to post the foreground notification (even though we don't show over lock screen) |
+| `FOREGROUND_SERVICE` | Run AlarmService as a foreground service (API 28+) |
 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Required for `foregroundServiceType="mediaPlayback"` (API 34+) |
-| `ACCESS_NOTIFICATION_POLICY` | Allows alarm to ring even in Do-Not-Disturb mode |
-| `POST_NOTIFICATIONS` | Required to show any notification on Android 13+ |
-| `USE_EXACT_ALARM` | Auto-granted on API 33+, no user prompt needed |
-| `SCHEDULE_EXACT_ALARM` | Covers API 21–32 for exact timing |
-| `READ_EXTERNAL_STORAGE` (maxSdkVersion=32) | Read audio files on Android ≤ 12 |
+| `ACCESS_NOTIFICATION_POLICY` | Ring even in Do-Not-Disturb mode |
+| `POST_NOTIFICATIONS` | Show any notification on Android 13+ |
+| `USE_EXACT_ALARM` | Auto-granted on API 33+, exact timing |
+| `SCHEDULE_EXACT_ALARM` | Exact timing on API 21–32 |
+| `READ_EXTERNAL_STORAGE` (max API 32) | Read audio files on Android ≤ 12 |
 | `READ_MEDIA_AUDIO` | Read audio files on Android 13+ |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Ask user to whitelist app from battery killer |
-| `AlarmService` with correct class name | The actual class is `com.gdelataillade.alarm.alarm.AlarmService` |
-| `AlarmService` with `stopWithTask="false"` | Keeps service alive when app is swiped away |
-| `AlarmReceiver` | BroadcastReceiver that fires when AlarmManager triggers |
-| `BootReceiver` with `BOOT_COMPLETED` + `QUICKBOOT_POWERON` | Reschedules after reboot; `QUICKBOOT_POWERON` covers HTC/Huawei fast-boot |
-| `showWhenLocked="true"` on Activity | Allows alarm screen to appear over lock screen |
-| `turnScreenOn="true"` on Activity | Wakes the screen when alarm fires |
+| `INTERNET` | Cloud sync via Firebase REST API |
+| `ACCESS_NETWORK_STATE` | Check connectivity before sync |
 
----
+### Exact alarm — two permissions, one goal
 
-### 4.3 `MainActivity.kt` — Rewritten from Scratch
+```
+SCHEDULE_EXACT_ALARM  →  API 21–32  granted by default, user can revoke
+USE_EXACT_ALARM       →  API 33+    auto-granted at install
+```
 
-**Before:** Was just `class MainActivity : FlutterActivity()` — one line, nothing else.
+Both declared so the alarm fires exactly on time on every Android version.
 
-**After:** Added a `MethodChannel` named `com.example.saengil_alrim/battery` that handles 4 calls from Flutter:
+### OEM battery management
 
-| Method | What it does |
+Standard battery optimization exemption (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) is not enough on Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, and Realme. These OEMs have additional proprietary managers.
+
+The home screen shows a persistent yellow banner on these devices. Tapping it opens:
+
+| OEM | Screen opened |
 |---|---|
-| `isIgnoringBatteryOptimizations` | Checks if app is exempt from battery optimization using `PowerManager` |
-| `requestIgnoreBatteryOptimizations` | Opens the system dialog asking user to exempt the app |
-| `canScheduleExactAlarms` | Checks `AlarmManager.canScheduleExactAlarms()` (API 31+) |
-| `openExactAlarmSettings` | Opens `Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM` |
+| Xiaomi / MIUI | AutoStart Management |
+| Huawei / Honor | App Launch Manager |
+| Samsung | Battery → Background usage limits |
+| Oppo / Realme | Startup Manager |
+| Vivo | Background App Refresh |
+| OnePlus | Battery Optimization |
+| Others | Standard battery optimization settings |
 
-Also added `onCreate` override that **automatically requests battery optimization exemption on first launch** — this is the most important step for OEM devices.
-
----
-
-### 4.4 `notification_service.dart` — Complete Rewrite
-
-**Before:** Used `flutter_local_notifications.zonedSchedule()`. The user's ringtone path was ignored. The `alarm` package was initialized but `Alarm.set()` was never called.
-
-**After — key changes:**
-
-- **Uses `Alarm.set()` with `AlarmSettings`** — this is what actually schedules a real alarm
-- **`androidStopAlarmOnTermination: false`** — the single most critical setting. Without this, swiping the app away from recents stops the alarm. With it, the alarm keeps ringing.
-- **`androidFullScreenIntent: true`** — wakes the screen and shows full-screen UI
-- **`loopAudio: true`** — music loops until user stops it
-- **`vibrate: true`** — vibrates alongside the audio
-- **`VolumeSettings.fade(fadeDuration: 10s)`** — volume fades in over 10 seconds like a real alarm
-- **`payload: birthday.id`** — stores the birthday ID so the ring screen knows whose birthday it is
-- **Stable alarm IDs** — D-Day uses even numbers, advance uses odd numbers, both derived from the birthday ID hash
-- **`_nextOccurrence()`** — correctly rolls to next year if the date has already passed; handles Feb 29 in non-leap years
-
----
-
-### 4.5 `birthday_service.dart` — Audio Path Resolution Added
-
-**Before:** `addBirthday()` and `updateBirthday()` saved the raw file path from `file_picker` (e.g. `/storage/emulated/0/Music/song.mp3`) and passed it directly to the alarm.
-
-**Problem:** When the app is closed, Android's scoped storage may revoke access to external paths. The alarm service (a separate native process) cannot read `/storage/emulated/0/...` paths reliably.
-
-**After:** Before saving, `_resolveRingtonePaths()` is called which:
-1. Detects if the path is an external absolute path (starts with `/`)
-2. Copies the file to `<app documents>/alarm_audio/dday_<id>.mp3`
-3. Saves the **relative path** (`alarm_audio/dday_<id>.mp3`) instead
-4. The alarm package resolves relative paths from the app's documents directory — always accessible
-
----
-
-### 4.6 `main.dart` — Alarm Stream Wiring
-
-**Before:** `MyApp` was a `StatelessWidget`. No alarm stream listener existed. Even if an alarm fired, nothing would navigate to a ring screen.
-
-**After:**
-- `MyApp` is now a `StatefulWidget`
-- Listens to `Alarm.ringing` stream (the modern API from alarm 5.4.1)
-- When an alarm fires, reads the birthday from SharedPreferences using `alarmSettings.payload` (the birthday ID)
-- Pushes `AlarmRingScreen` via a global `NavigatorKey` — this works even when the app was launched by the alarm (not by the user)
-- `StreamSubscription` is properly cancelled in `dispose()`
-
----
-
-### 4.7 `alarm_ring_screen.dart` — Created from Scratch
-
-**Before:** Did not exist.
-
-**After:** A full-screen alarm UI with:
-- Live clock updating every second
-- Pulsing avatar circle with the person's sticker
-- Two expanding ring-wave animations
-- 60 confetti particles falling continuously
-- Alarm type badge (Birthday Alarm vs Reminder)
-- Person's name in handwriting font
-- Contextual message ("It's X's birthday today!" or "X's birthday is in N days!")
-- Gift notes preview (if any)
-- **Stop Alarm** button — calls `Alarm.stop()` and pops the screen
-- Forces portrait orientation while open
-- Uses `SystemUiMode.immersiveSticky` (hides status/nav bars)
-- Background: very light gradient tinted with the person's card colour
-
----
-
-### 4.8 `permission_service.dart` — Created from Scratch
-
-**Before:** Did not exist. No permission checking anywhere.
-
-**After:** A singleton service that checks two things:
-1. **Exact alarm permission** — calls `canScheduleExactAlarms` via MethodChannel
-2. **Battery optimization exemption** — calls `isIgnoringBatteryOptimizations` via MethodChannel
-
-Returns a list of `MissingPermission` enum values. Used by `HomeScreen` to show banners.
-
----
-
-### 4.9 `home_screen.dart` — Permission Banners Added
-
-**Before:** `StatelessWidget`, no permission awareness.
-
-**After:**
-- Converted to `StatefulWidget` with `WidgetsBindingObserver`
-- Checks permissions after first frame renders
-- Re-checks when user returns from Settings (via `didChangeAppLifecycleState`)
-- Shows orange banner if battery optimization is not granted
-- Shows red banner if exact alarm permission is missing
-- Each banner is tappable — opens the relevant system settings page directly
-
----
-
-### 4.10 Snooze Removed
-
-The snooze button was removed from `AlarmRingScreen`. Only the **Stop Alarm** button remains. This was a deliberate design decision — birthday alarms should be acknowledged, not postponed.
-
----
-
-## 5. File-by-File Breakdown
-
-```
-lib/
-│
-├── main.dart
-│   • App entry point
-│   • Calls NotificationService().init() → Alarm.init()
-│   • MyApp is StatefulWidget — listens to Alarm.ringing stream
-│   • When alarm fires: reads birthday from SharedPreferences,
-│     pushes AlarmRingScreen via global NavigatorKey
-│
-├── screens/
-│   │
-│   ├── home_screen.dart
-│   │   • Main screen with calendar and birthday lists
-│   │   • Checks permissions on load and when returning from Settings
-│   │   • Shows orange/red banners for missing permissions
-│   │   • FAB opens AddBirthdayScreen as a bottom sheet
-│   │
-│   ├── add_birthday_screen.dart
-│   │   • Full add/edit form for a birthday
-│   │   • Month/day wheel picker, year field, sticker grid, colour picker
-│   │   • Alarm section with animated tree-branch UI
-│   │   • Ringtone picker using file_picker (audio files only)
-│   │   • Requires ringtone to be selected before saving
-│   │
-│   ├── birthday_detail_screen.dart
-│   │   • Friend profile sheet showing all birthday details
-│   │   • Live countdown to next alarm
-│   │   • Inline notes editing
-│   │   • Edit and delete buttons
-│   │
-│   └── alarm_ring_screen.dart
-│       • Full-screen alarm UI
-│       • Pulsing avatar, ring waves, confetti, live clock
-│       • Stop Alarm button → Alarm.stop() + Navigator.pop()
-│       • Forces portrait, immersive mode
-│       • Light gradient background tinted with person's card colour
-│
-├── services/
-│   │
-│   ├── birthday_service.dart
-│   │   • FriendBirthday model (immutable, with copyWith)
-│   │   • JSON serialization/deserialization
-│   │   • BirthdayProvider (ChangeNotifier)
-│   │   • Loads/saves to SharedPreferences
-│   │   • _resolveRingtonePaths() — copies audio to internal storage
-│   │   • _copyAudioToInternal() — copies file, returns relative path
-│   │   • Calls NotificationService on add/update/delete
-│   │
-│   ├── notification_service.dart
-│   │   • Singleton
-│   │   • init() → Alarm.init()
-│   │   • scheduleBirthdayAlarms() → Alarm.set() for D-Day and advance
-│   │   • cancelBirthdayAlarms() → Alarm.stop() for both IDs
-│   │   • _nextOccurrence() — rolls to next year if date passed
-│   │   • _validatePath() — checks path is usable
-│   │   • Stable ID generation from birthday ID hash
-│   │
-│   └── permission_service.dart
-│       • Singleton
-│       • hasExactAlarmPermission() via MethodChannel
-│       • requestExactAlarmPermission() → opens Settings
-│       • isIgnoringBatteryOptimizations() via MethodChannel
-│       • requestIgnoreBatteryOptimizations() → opens system dialog
-│       • checkAll() → returns List<MissingPermission>
-│
-└── widgets/
-    ├── app_styles.dart      — Colors, TextStyles, BoxDecorations, font names
-    ├── birthday_card.dart   — Card widget used in home screen lists
-    ├── cute_sticker.dart    — Renders asset path or file path sticker image
-    ├── funky_calendar.dart  — Monthly calendar with birthday dot indicators
-    ├── confetti_particles.dart — Confetti overlay widget
-    └── custom_button.dart   — Reusable styled button
-
-android/app/src/main/
-├── AndroidManifest.xml      — All permissions + service/receiver declarations
-└── kotlin/.../MainActivity.kt — MethodChannel for battery + exact alarm
-```
-
----
-
-## 6. Permissions Explained
-
-### Why two exact alarm permissions?
-
-```
-SCHEDULE_EXACT_ALARM  →  API 21 to 32  (Android 5 to 12)
-                          Granted by default on install.
-                          User can revoke in Settings.
-
-USE_EXACT_ALARM       →  API 33+  (Android 13+)
-                          Auto-granted at install, no user prompt.
-                          Restricted to alarm/calendar apps on Play Store.
-
-We declare BOTH so the alarm fires exactly on time on every Android version.
-```
-
-### Why battery optimization matters so much
-
-Normal Android: when you swipe an app away, its background processes stop. That's fine for most apps.
-
-For alarm apps: the `AlarmService` is a **Foreground Service** — it's supposed to keep running. But Samsung, Xiaomi, Huawei, and others have their own battery management layers that kill foreground services anyway.
-
-The `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission lets us ask the user to whitelist the app. Once whitelisted, the OS treats it like a system app and won't kill it.
-
-**The app asks for this automatically on first launch.** If the user denies it, a banner appears on the home screen with a direct link to fix it.
+Once you complete the step, tap **×** on the banner. The dismissal is persisted in SharedPreferences (`oem_battery_banner_dismissed = true`) and the banner never shows again.
 
 ---
 
 ## 7. Audio File Handling
 
-### The problem with external file paths
+### The problem
 
-When you pick a song using `file_picker`, you get a path like:
+`file_picker` returns absolute external paths like:
 ```
 /storage/emulated/0/Music/Happy Birthday.mp3
 ```
 
-This works while the app is open. But when the app is closed:
-- Android's scoped storage may revoke read access to external paths
-- The `AlarmService` runs as a separate native process and cannot use Flutter's file access context
-- The path may simply not be readable
+These paths are readable while the app is open. When the app is closed, Android's scoped storage may revoke access. The `AlarmService` (a separate native process) cannot reliably read `/storage/emulated/0/...` paths.
 
 ### The solution — copy to internal storage
 
-When you save a birthday, the app:
+When a birthday is saved, `_resolveRingtonePaths()` runs:
 
-1. Detects the path starts with `/` (external absolute path)
-2. Copies the file to:
-   ```
-   <app documents>/alarm_audio/dday_<birthdayId>.mp3
-   ```
-3. Saves the **relative path** `alarm_audio/dday_<birthdayId>.mp3` in the model
-4. This relative path is what gets passed to `Alarm.set(assetAudioPath: ...)`
+1. Detects if path starts with `/` (external absolute path)
+2. Copies the file to `<app documents>/alarm_audio/dday_<id>.mp3`
+3. Stores the **relative path** `alarm_audio/dday_<id>.mp3` in the model
 
-The alarm package's native `AudioService.kt` resolves relative paths from `context.filesDir.parent/app_flutter/` — this directory is always accessible to the app's own processes, even when the app is closed.
+The alarm package's native audio code resolves relative paths from the app's internal documents directory — always accessible by the app's own processes regardless of lock state or scoped storage.
 
-The copied file persists across app restarts, device reboots, and app updates.
+Copied files persist across restarts, reboots, and app updates.
 
 ---
 
-## 8. Alarm Screen UI
+## 8. Alarm Scheduling Logic
 
-### Background opacity
-
-Controlled in `_buildBackground()` in `alarm_ring_screen.dart`:
+### ID generation
 
 ```dart
-colors: [
-  themeColor.withValues(alpha: 0.40),   // top — person's card colour at 40%
-  themeColor.withValues(alpha: 0.86),   // middle at 86%
-  Colors.white.withValues(alpha: 0.60), // bottom — white wash at 60%
-],
+dDayId(friendId)   = (friendId.hashCode.abs() % 1_000_000) * 2 + 2  // even
+advanceId(friendId) = (friendId.hashCode.abs() % 1_000_000) * 2 + 3  // odd
 ```
 
-`alpha` goes from `0.0` (fully transparent) to `1.0` (fully opaque). The `themeColor` is the pastel card colour you chose for that person when adding their birthday.
+Even IDs = D-Day alarms. Odd IDs = advance reminders. IDs are stable — editing a birthday reschedules the same IDs.
 
-### Animations
+### Next occurrence
 
-| Animation | What it does |
-|---|---|
-| Pulse | Avatar circle scales between 1.0× and 1.12× every 900ms |
-| Ring waves | Two expanding circles fade out as they grow, offset by 0.5 phase |
-| Fade-in | Whole screen fades in over 600ms when alarm opens |
-| Confetti | 60 particles (circles and rectangles) fall continuously, respawn at top |
-| Clock | Updates every second via `Timer.periodic` |
+`_nextOccurrence()` picks the next future date for a given month/day/time:
+
+- If the date this year is still in the future → schedules this year
+- If the date has already passed this year → schedules next year
+- Handles February 29 in non-leap years by clamping to Feb 28
+
+### Post-dismissal reschedule
+
+When the user taps Stop Alarm:
+
+- **D-Day alarm dismissed:** both alarms roll to next year's birthday
+- **Advance alarm dismissed:** advance rolls to next year's birthday minus N days; D-Day stays this year if it hasn't fired yet
+- **Both:** handled by `scheduleBirthdayAlarmsAfter(firedAlarmId:)` passing the dismissed alarm's ID to determine which path to take
 
 ---
 
-## 9. Project Structure
+## 9. File-by-File Breakdown
 
 ```
-saengil_alrim/
-├── lib/                          Flutter source code
-├── android/
-│   └── app/src/main/
-│       ├── AndroidManifest.xml   Permissions + components
-│       └── kotlin/.../
-│           └── MainActivity.kt   Native permission handling
-├── assets/
-│   ├── icon/                     App icon + add button icon
-│   ├── sticker/                  28 PNG sticker images
-│   └── fonts/                    Comfortaa, GloriaHallelujah, PlaywriteUSModern
-├── pubspec.yaml                  Dependencies + asset declarations
-└── README.md                     This file
+lib/
+├── main.dart
+│   • Calls NotificationService().init() → Alarm.init() before runApp
+│   • MyApp is StatefulWidget + WidgetsBindingObserver
+│   • Listens to Alarm.ringing BehaviorSubject
+│   • _handleAlarm(): synchronously claims alarm ID, checks lock state
+│   • _pendingLockedAlarms: queue for alarms deferred while locked
+│   • _onResumed(): flushes queue, re-checks stream, handles tap payload
+│   • _showAlarmScreen(): pushes AlarmRingScreen via global NavigatorKey
+│   • _waitForNavigator(): polls up to 6 s for navigator on cold launch
+│
+├── screens/
+│   ├── home_screen.dart
+│   │   • Permission banners: notifications, battery, exact alarm, OEM
+│   │   • OEM banner has separate tap (opens settings) and × (dismiss, persisted)
+│   │   • Re-checks permissions on didChangeAppLifecycleState.resumed
+│   │   • Calendar + birthday lists (today's date, this month + next month)
+│   │
+│   ├── add_birthday_screen.dart
+│   │   • Section labels use PlaywriteUSModern 20px w800 (no icons)
+│   │   • Month/day wheel picker, birth year field
+│   │   • Sticker grid (28 built-in), gallery photo option
+│   │   • Alarm section with animated tree-branch expand/collapse UI
+│   │   • Last-used alarm settings pre-filled for new entries
+│   │
+│   ├── birthday_detail_screen.dart
+│   │   • Full profile: sticker, name, countdown, notes, alarm summary
+│   │   • Edit and delete actions
+│   │
+│   ├── alarm_ring_screen.dart
+│   │   • Live clock (updates every second)
+│   │   • Pulsing avatar + two expanding ring waves
+│   │   • 60 confetti particles (continuous)
+│   │   • Birthday vs reminder badge, name, message, notes
+│   │   • Stop Alarm → Alarm.stop() + reschedule + pop
+│   │   • SystemUiMode.edgeToEdge (not immersiveSticky, safer on OEM lock screens)
+│   │
+│   ├── saved_birthdays_screen.dart
+│   │   • Scrollable list of all saved birthdays
+│   │   • Tap → birthday_detail_screen
+│   │
+│   └── cloud_sync_sheet.dart
+│       • Shows this device's sync code with one-tap copy
+│       • Push: uploads to /birthdays/<userId>/
+│       • Get: prompts for friend's sync code, fetches their node,
+│              shows only entries not already on device
+│       • Imported entries get a randomly assigned sticker
+│
+├── services/
+│   ├── birthday_service.dart
+│   │   • FriendBirthday model (immutable, copyWith, toJson, fromJson)
+│   │   • kAllStickers: single source of truth for all sticker paths
+│   │   • randomSticker(): used as fallback when importing from cloud
+│   │   • BirthdayProvider (ChangeNotifier): load/save/add/update/delete
+│   │   • _resolveRingtonePaths(): copies external audio to internal storage
+│   │
+│   ├── notification_service.dart
+│   │   • scheduleBirthdayAlarms() / scheduleBirthdayAlarmsAfter()
+│   │   • Alarm.set() with androidFullScreenIntent: false
+│   │   • androidStopAlarmOnTermination: false (keeps ringing after app swipe)
+│   │   • loopAudio: true, vibrate: true, VolumeSettings.fade(10s)
+│   │   • cancelBirthdayAlarms(): Alarm.stop() for both IDs
+│   │
+│   ├── permission_service.dart
+│   │   • hasNotificationPermission / requestNotificationPermission
+│   │   • hasExactAlarmPermission / requestExactAlarmPermission
+│   │   • isIgnoringBatteryOptimizations / requestIgnoreBatteryOptimizations
+│   │   • needsOemBatterySettings(): true for known OEM brands
+│   │   • oemBatterySettingsLabel(): device-specific label string
+│   │   • openOemBatterySettings(): deep-links to OEM settings screen
+│   │   • dismissOemBanner(): persists dismissal in SharedPreferences
+│   │   • checkAll(): returns List<MissingPermission>
+│   │
+│   ├── cloud_service.dart
+│   │   • getUserId(): persistent UUID from SharedPreferences
+│   │   • pushToCloud(): PUT to /birthdays/<userId>/
+│   │   • fetchFromUser(syncCode): GET from /birthdays/<syncCode>/
+│   │   • Syncs only: id, name, month, day, birthYear, notes
+│   │
+│   └── update_service.dart
+│       • Checks for APK updates via HTTP
+│
+└── widgets/
+    ├── app_styles.dart       Colors, TextStyles, BoxDecorations, font names
+    ├── birthday_card.dart    Card widget used in home screen lists
+    ├── cute_sticker.dart     Renders asset or file path sticker image
+    ├── funky_calendar.dart   Monthly calendar with birthday dot indicators
+    └── ...
+
+android/app/src/main/
+├── AndroidManifest.xml       All permissions, service, receiver declarations
+│                             No showWhenLocked / turnScreenOn on activity
+└── kotlin/.../MainActivity.kt
+    • MethodChannel: com.example.saengil_alrim/battery
+    • isDeviceLocked → KeyguardManager.isKeyguardLocked
+    • isIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations
+    • canScheduleExactAlarms, openExactAlarmSettings
+    • hasNotificationPermission, requestNotificationPermission
+    • getManufacturer → Build.MANUFACTURER.lowercase()
+    • openOemBatterySettings → per-OEM intent with fallback
+    • getNotificationLaunchPayload → payload from notification tap intent
 ```
 
 ---
@@ -518,17 +454,17 @@ saengil_alrim/
 
 | Package | Version | Purpose |
 |---|---|---|
-| `alarm` | ^5.4.1 | Core alarm scheduling, foreground service, audio playback, full-screen intent |
+| `alarm` | ^5.4.1 | Core: exact alarm, foreground service, audio playback |
 | `provider` | ^6.1.2 | State management (`BirthdayProvider`) |
-| `shared_preferences` | ^2.2.3 | Persist birthday data as JSON |
-| `file_picker` | ^8.1.4 | Pick audio ringtone from device storage |
+| `shared_preferences` | ^2.2.3 | Persist birthday JSON + user settings |
+| `file_picker` | ^8.1.4 | Pick audio ringtone from device |
 | `image_picker` | ^1.1.2 | Pick sticker photo from gallery |
-| `path_provider` | ^2.1.5 | Get app documents directory for audio file copying |
-| `flutter_local_notifications` | ^21.0.0 | Kept as dependency (used by alarm package internally) |
-| `timezone` | ^0.11.0 | Timezone-aware date handling |
-| `flutter_timezone` | ^5.1.0 | Get device's local timezone |
+| `path_provider` | ^2.1.5 | App documents directory for audio copying |
+| `http` | ^1.2.2 | Firebase REST API calls for cloud sync |
 | `intl` | ^0.20.2 | Date formatting |
-| `audioplayers` | ^6.1.0 | Declared but audio is handled natively by alarm package |
+| `audioplayers` | ^6.1.0 | Audio preview in settings (alarm package handles actual alarm audio natively) |
+| `package_info_plus` | ^8.3.0 | App version for update check |
+| `url_launcher` | ^6.3.1 | Open browser for APK download |
 | `cupertino_icons` | ^1.0.8 | iOS-style icons |
 
 ---
@@ -538,26 +474,22 @@ saengil_alrim/
 ### Requirements
 
 - Flutter 3.41+ / Dart 3.11+
-- Android Studio or VS Code with Flutter extension
-- Android device or emulator (API 21+, Android 5.0+)
+- Android device or emulator (API 21+)
 
 ### Run
 
 ```bash
-git clone https://github.com/yourusername/saengil_alrim.git
-cd saengil_alrim
 flutter pub get
 flutter run
 ```
 
-### First launch checklist
+### First-launch checklist
 
-1. App opens → system dialog appears asking to allow background activity → tap **Allow**
-2. Add a birthday → pick a ringtone from your device
-3. Set the alarm time to a few minutes from now for testing
+1. **Battery optimization** — system dialog appears on first open → tap **Allow**
+2. **OEM autostart** — if a yellow banner appears, tap it → enable the setting → tap **×** to dismiss
+3. **Add a birthday** → pick a ringtone → set alarm time a few minutes away for testing
 4. Swipe the app away from recents
-5. Lock your phone
-6. Wait — the alarm screen should appear over the lock screen with your music playing
+5. Wait — audio should play at the scheduled time. Unlock your phone → ring screen appears
 
 ### Build release APK
 
@@ -567,19 +499,19 @@ flutter build apk --release
 
 ---
 
-## Fonts
+## 12. Fonts & Stickers
 
-| Family | Weights | Used for |
-|---|---|---|
-| Comfortaa | 300, 400, 500, 600, 700 | All body text, labels, buttons |
-| GloriaHallelujah | 400 | Accent text |
-| Playwrite US Modern | 100, 200, 300, 400 | Titles, headings, alarm screen name |
+### Fonts
 
----
+| Family | Used for |
+|---|---|
+| **Comfortaa** | All body text, labels, buttons, captions |
+| **PlaywriteUSModern** | Section headings in add/edit form, alarm screen name display |
+| **GloriaHallelujah** | App title, date labels |
 
-## Stickers
+### Stickers
 
-28 PNG stickers in `assets/sticker/`:
+28 PNG stickers bundled in `assets/sticker/`. Defined in `kAllStickers` in `birthday_service.dart` — the single source of truth used by both the picker UI and the random-assignment fallback for cloud imports.
 
 **Cakes:** birthday-cake, birthday-cake_1, cake, cake_1, cake_2, cake_3, cupcake, pie
 
@@ -587,13 +519,7 @@ flutter build apk --release
 
 **Nature & Objects:** flower, flower-pot, tulips, magic, drawing, glasses
 
-You can also use any photo from your gallery as a sticker.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+You can also use any photo from your gallery as a custom sticker.
 
 ---
 

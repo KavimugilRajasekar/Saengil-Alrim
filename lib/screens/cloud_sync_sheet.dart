@@ -1,8 +1,12 @@
 // cloud_sync_sheet.dart
-// Bottom sheet shown when the user taps "Connect to Cloud".
-// Offers Push and Get (pull) operations against Firebase RTDB.
+// Bottom sheet for cloud sync.
+//
+// Push  → uploads THIS device's birthdays to its own private cloud node.
+// Get   → user enters a friend's sync code (userId) to import their entries.
+// Code  → shows THIS device's sync code so a friend can pull from it.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/birthday_service.dart';
@@ -37,6 +41,17 @@ class _CloudSyncSheetState extends State<_CloudSyncSheet> {
   List<FriendBirthday> _cloudBirthdays = [];
   final Set<String> _selectedIds = {};
 
+  // This device's sync code (userId) — loaded once
+  String? _myCode;
+
+  @override
+  void initState() {
+    super.initState();
+    _cloud.getUserId().then((id) {
+      if (mounted) setState(() => _myCode = id);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -63,7 +78,16 @@ class _CloudSyncSheetState extends State<_CloudSyncSheet> {
   Widget _buildBody() {
     switch (_state) {
       case _SyncState.idle:
-        return _IdleView(onPush: _handlePush, onGet: _handleGet);
+        return _IdleView(
+          myCode: _myCode,
+          onPush: _handlePush,
+          onGet: () => setState(() => _state = _SyncState.enterCode),
+        );
+      case _SyncState.enterCode:
+        return _EnterCodeView(
+          onConfirm: _handleGet,
+          onCancel: _reset,
+        );
       case _SyncState.loading:
         return const _LoadingView();
       case _SyncState.error:
@@ -92,8 +116,7 @@ class _CloudSyncSheetState extends State<_CloudSyncSheet> {
         );
       case _SyncState.getSuccess:
         return _SuccessView(
-          message:
-              '${_selectedIds.length} birthday(s) added to your device.',
+          message: '${_selectedIds.length} birthday(s) added to your device.',
           onDone: () => Navigator.pop(context),
         );
     }
@@ -115,13 +138,23 @@ class _CloudSyncSheetState extends State<_CloudSyncSheet> {
     }
   }
 
-  Future<void> _handleGet() async {
+  /// Called from [_EnterCodeView] with the sync code the user typed.
+  Future<void> _handleGet(String syncCode) async {
     final provider = context.read<BirthdayProvider>();
     setState(() => _state = _SyncState.loading);
     try {
-      final cloud = await _cloud.fetchFromCloud();
+      final cloud = await _cloud.fetchFromUser(syncCode);
 
-      // Only show entries that are NOT already on the device
+      if (cloud.isEmpty) {
+        setState(() {
+          _state = _SyncState.error;
+          _errorMessage =
+              'No birthdays found for that sync code.\nDouble-check the code and try again.';
+        });
+        return;
+      }
+
+      // Only show entries that are NOT already on this device (by id).
       final localIds = provider.birthdays.map((b) => b.id).toSet();
       final newOnes = cloud.where((b) => !localIds.contains(b.id)).toList();
 
@@ -129,7 +162,7 @@ class _CloudSyncSheetState extends State<_CloudSyncSheet> {
         setState(() {
           _state = _SyncState.error;
           _errorMessage =
-              'No new birthdays found in the cloud.\nAll cloud entries are already on your device.';
+              'All entries from that sync code are already on your device.';
         });
         return;
       }
@@ -180,14 +213,41 @@ class _CloudSyncSheetState extends State<_CloudSyncSheet> {
 }
 
 // ── State enum ────────────────────────────────────────────────────────────────
-enum _SyncState { idle, loading, error, pushSuccess, getSelect, getSuccess }
+enum _SyncState {
+  idle,
+  enterCode,
+  loading,
+  error,
+  pushSuccess,
+  getSelect,
+  getSuccess,
+}
 
-// ── Sub-views ─────────────────────────────────────────────────────────────────
-
-class _IdleView extends StatelessWidget {
+// ── Idle view ─────────────────────────────────────────────────────────────────
+class _IdleView extends StatefulWidget {
+  final String? myCode;
   final VoidCallback onPush;
   final VoidCallback onGet;
-  const _IdleView({required this.onPush, required this.onGet});
+  const _IdleView({
+    required this.myCode,
+    required this.onPush,
+    required this.onGet,
+  });
+
+  @override
+  State<_IdleView> createState() => _IdleViewState();
+}
+
+class _IdleViewState extends State<_IdleView> {
+  bool _codeCopied = false;
+
+  void _copyCode() {
+    if (widget.myCode == null) return;
+    Clipboard.setData(ClipboardData(text: widget.myCode!));
+    setState(() => _codeCopied = true);
+    Future.delayed(const Duration(seconds: 2),
+        () => mounted ? setState(() => _codeCopied = false) : null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -209,18 +269,92 @@ class _IdleView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Title
           Text(
             'Cloud Sync',
             style: AppStyles.titleHandwritten.copyWith(fontSize: 22),
           ),
           const SizedBox(height: 6),
           Text(
-            'Back up your birthdays or restore from the cloud.',
+            'Back up your birthdays or import from a friend.',
             style: AppStyles.captionBubbly,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
+
+          // ── My sync code ───────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.accentBorder, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.qr_code_rounded,
+                        size: 16, color: AppColors.textLight),
+                    const SizedBox(width: 6),
+                    Text('Your Sync Code',
+                        style: AppStyles.captionBubbly
+                            .copyWith(fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: _copyCode,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: _codeCopied
+                            ? Row(
+                                key: const ValueKey('copied'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.check_rounded,
+                                      size: 14,
+                                      color: AppColors.pastelMint),
+                                  const SizedBox(width: 4),
+                                  Text('Copied',
+                                      style: AppStyles.captionBubbly.copyWith(
+                                          color: AppColors.pastelMint)),
+                                ],
+                              )
+                            : Row(
+                                key: const ValueKey('copy'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.copy_rounded,
+                                      size: 14,
+                                      color: AppColors.textLight),
+                                  const SizedBox(width: 4),
+                                  Text('Copy',
+                                      style: AppStyles.captionBubbly),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  widget.myCode ?? 'Loading…',
+                  style: AppStyles.bodyBubbly.copyWith(
+                    fontSize: 12,
+                    color: AppColors.textDark,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Share this code with friends so they can import your birthdays.',
+                  style: AppStyles.captionBubbly.copyWith(fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
 
           // Push button
           _ActionButton(
@@ -228,17 +362,17 @@ class _IdleView extends StatelessWidget {
             icon: Icons.cloud_upload_rounded,
             label: 'Push',
             subtitle: 'Upload your birthdays to the cloud',
-            onTap: onPush,
+            onTap: widget.onPush,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           // Get button
           _ActionButton(
             color: AppColors.secondaryApricot,
             icon: Icons.cloud_download_rounded,
             label: 'Get',
-            subtitle: 'Download new birthdays from the cloud',
-            onTap: onGet,
+            subtitle: "Enter a friend's sync code to import their birthdays",
+            onTap: widget.onGet,
           ),
           const SizedBox(height: 8),
         ],
@@ -247,6 +381,146 @@ class _IdleView extends StatelessWidget {
   }
 }
 
+// ── Enter code view ───────────────────────────────────────────────────────────
+class _EnterCodeView extends StatefulWidget {
+  final ValueChanged<String> onConfirm;
+  final VoidCallback onCancel;
+  const _EnterCodeView({required this.onConfirm, required this.onCancel});
+
+  @override
+  State<_EnterCodeView> createState() => _EnterCodeViewState();
+}
+
+class _EnterCodeViewState extends State<_EnterCodeView> {
+  final _ctrl = TextEditingController();
+  bool _hasInput = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(() {
+      final has = _ctrl.text.trim().isNotEmpty;
+      if (has != _hasInput) setState(() => _hasInput = has);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 50,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.accentBorder.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            "Enter Friend's Sync Code",
+            style: AppStyles.titleHandwritten.copyWith(fontSize: 20),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Ask your friend to share their sync code from the Cloud Sync screen, then paste it below.',
+            style: AppStyles.captionBubbly,
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            style: AppStyles.bodyBubbly.copyWith(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'e.g. 3f4a12b8-…',
+              hintStyle:
+                  AppStyles.captionBubbly.copyWith(color: AppColors.textLight),
+              filled: true,
+              fillColor: AppColors.cardBg,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.accentBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.accentBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                    color: AppColors.primaryPink, width: 2),
+              ),
+              suffixIcon: _hasInput
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: AppColors.textLight, size: 18),
+                      onPressed: () => _ctrl.clear(),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: widget.onCancel,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: AppStyles.funkyButtonDecoration(
+                        color: AppColors.secondaryApricot),
+                    alignment: Alignment.center,
+                    child: Text('Cancel', style: AppStyles.bodyBubblyBold),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: _hasInput
+                      ? () => widget.onConfirm(_ctrl.text.trim())
+                      : null,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: AppStyles.funkyButtonDecoration(
+                      color: _hasInput
+                          ? AppColors.primaryPink
+                          : AppColors.accentBorder.withValues(alpha: 0.2),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text('Import',
+                        style: AppStyles.bodyBubblyBold.copyWith(
+                          color: _hasInput
+                              ? AppColors.textDark
+                              : AppColors.textLight,
+                        )),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Reusable action button ────────────────────────────────────────────────────
 class _ActionButton extends StatelessWidget {
   final Color color;
   final IconData icon;
@@ -268,8 +542,7 @@ class _ActionButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: AppStyles.funkyButtonDecoration(color: color),
         child: Row(
           children: [
@@ -280,8 +553,8 @@ class _ActionButton extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: AppStyles.bodyBubblyBold
-                          .copyWith(fontSize: 16)),
+                      style:
+                          AppStyles.bodyBubblyBold.copyWith(fontSize: 16)),
                   const SizedBox(height: 2),
                   Text(subtitle, style: AppStyles.captionBubbly),
                 ],
@@ -296,6 +569,7 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
+// ── Loading view ──────────────────────────────────────────────────────────────
 class _LoadingView extends StatelessWidget {
   const _LoadingView();
 
@@ -317,6 +591,7 @@ class _LoadingView extends StatelessWidget {
   }
 }
 
+// ── Error view ────────────────────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -338,12 +613,11 @@ class _ErrorView extends StatelessWidget {
           GestureDetector(
             onTap: onRetry,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 28, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
               decoration: AppStyles.funkyButtonDecoration(
                   color: AppColors.pastelMint),
-              child: Text('Go Back',
-                  style: AppStyles.bodyBubblyBold),
+              child: Text('Go Back', style: AppStyles.bodyBubblyBold),
             ),
           ),
         ],
@@ -352,6 +626,7 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
+// ── Success view ──────────────────────────────────────────────────────────────
 class _SuccessView extends StatelessWidget {
   final String message;
   final VoidCallback onDone;
@@ -375,8 +650,8 @@ class _SuccessView extends StatelessWidget {
           GestureDetector(
             onTap: onDone,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 28, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
               decoration: AppStyles.funkyButtonDecoration(
                   color: AppColors.primaryPink),
               child: Text('Done', style: AppStyles.bodyBubblyBold),
@@ -433,9 +708,8 @@ class _GetSelectView extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'New in Cloud',
-                      style: AppStyles.titleHandwritten
-                          .copyWith(fontSize: 20),
+                      "Friend's Birthdays",
+                      style: AppStyles.titleHandwritten.copyWith(fontSize: 20),
                     ),
                     Text(
                       '${selectedIds.length} selected',
@@ -531,8 +805,7 @@ class _GetSelectView extends StatelessWidget {
                       decoration: AppStyles.funkyButtonDecoration(
                           color: AppColors.secondaryApricot),
                       alignment: Alignment.center,
-                      child: Text('Cancel',
-                          style: AppStyles.bodyBubblyBold),
+                      child: Text('Cancel', style: AppStyles.bodyBubblyBold),
                     ),
                   ),
                 ),
@@ -559,7 +832,11 @@ class _GetSelectView extends StatelessWidget {
   }
 
   String _dateLabel(FriendBirthday b) {
-    final month = kMonthNamesShort[b.month - 1];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final month = months[b.month - 1];
     final year = b.birthYear != null ? ' · Born ${b.birthYear}' : '';
     return '$month ${b.day}$year';
   }

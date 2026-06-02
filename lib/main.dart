@@ -22,18 +22,12 @@ const _kChannel = MethodChannel('com.example.saengil_alrim/battery');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Alarm.init() registers the Pigeon callback handler AND calls checkAlarm()
-  // which detects alarms that fired while the app was killed/backgrounded.
-  // Must complete before runApp so the ringing BehaviorSubject is seeded.
   await NotificationService().init(); // internally calls Alarm.init()
-
   runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
-
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -41,35 +35,40 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   StreamSubscription<AlarmSet>? _ringingSubscription;
 
-  // Deduplication: alarm ID is in this set while its ring screen is on the stack.
-  final Set<int> _shownAlarmIds = {};
+  // ── Deduplication ─────────────────────────────────────────────
+  // Alarm ID is in this set from the moment we decide what to do with it
+  // (show immediately OR defer) until the ring screen is dismissed.
+  // This prevents any race between the stream replay, the 1-second check,
+  // and the resumed flush from processing the same alarm twice.
+  final Set<int> _handledAlarmIds = {};
+
+  // ── Deferred queue ────────────────────────────────────────────
+  // Alarms that fired while the device was locked. Stored here until
+  // AppLifecycleState.resumed fires (user unlocks / brings app forward).
+  final List<AlarmSettings> _pendingLockedAlarms = [];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Subscribe to the ringing stream immediately.
-    // Alarm.ringing is a BehaviorSubject — it replays the latest value to
-    // every new subscriber, so we will receive any alarm that is already
-    // ringing right now.
+    // BehaviorSubject — replays the latest value immediately on subscribe,
+    // so any alarm already ringing at launch is handled right away.
     _ringingSubscription = Alarm.ringing.listen(_onRingingChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Primary check: handle alarms already ringing (covers cold launch from
-      // full-screen intent on locked screen).
-      _onRingingChanged(Alarm.ringing.value);
+      // Belt-and-suspenders: process current ringing state once the widget
+      // tree is ready. The subscription above already covers this, but the
+      // post-frame ensures the navigator is mounted before we try to push.
+      await _processRingingSet(Alarm.ringing.value);
 
-      // Secondary check after 1 second: covers the race where AlarmService
-      // populates ringingAlarmIds slightly after Alarm.init() completes.
+      // Race guard: AlarmService sometimes populates ringing IDs ~1 s after
+      // Alarm.init() completes (e.g. on cold launch from a killed state).
       Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) _onRingingChanged(Alarm.ringing.value);
+        if (mounted) _processRingingSet(Alarm.ringing.value);
       });
 
-      // Notification-tap check: when the device is UNLOCKED and the user taps
-      // the alarm notification (app killed / bg / fg), MainActivity stores the
-      // payload and we retrieve it here to navigate to AlarmRingScreen.
-      // This is the fallback for when Alarm.ringing hasn't replayed yet.
+      // Handle notification-tap launch (unlocked device, app was killed).
       await _handleNotificationLaunchPayload();
     });
   }
@@ -78,50 +77,159 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // App came to foreground (from background or lock screen).
-      _onRingingChanged(Alarm.ringing.value);
-      // Also check if a notification tap brought us here.
-      _handleNotificationLaunchPayload();
+      _onResumed();
     }
   }
 
-  // ── Handle notification tap payload from native side ──────────
-  // Called on cold launch and on every resume. MainActivity stores the
-  // birthday ID from the notification tap intent; we consume it once.
+  /// Called when the app comes to the foreground.
+  /// Flushes deferred locked alarms, then handles any notification tap.
+  Future<void> _onResumed() async {
+    // Flush alarms that were deferred because the device was locked.
+    if (_pendingLockedAlarms.isNotEmpty) {
+      // Snapshot and clear before iterating to avoid modification-during-iteration.
+      final toShow = List<AlarmSettings>.from(_pendingLockedAlarms);
+      _pendingLockedAlarms.clear();
+
+      for (final alarm in toShow) {
+        // Remove from handled set so _showAlarmScreen can proceed.
+        // (_handleAlarm added the ID when deferring, which would otherwise
+        //  block _showAlarmScreen's guard check.)
+        _handledAlarmIds.remove(alarm.id);
+        await _showAlarmScreen(alarm);
+      }
+    }
+
+    // Also re-check the live stream — catches any alarm that started
+    // ringing after the last stream event (edge case on some OEMs).
+    await _processRingingSet(Alarm.ringing.value);
+
+    // Check for a notification-tap payload (user tapped banner to open app).
+    await _handleNotificationLaunchPayload();
+  }
+
+  // ── Stream handler ─────────────────────────────────────────────
+  /// Called by the BehaviorSubject whenever the ringing set changes.
+  void _onRingingChanged(AlarmSet alarmSet) {
+    // Fire-and-forget: process serially via a sequential async chain is
+    // overkill here because _handleAlarm's dedup guard (_handledAlarmIds)
+    // is synchronously checked-and-set before any await, making it safe.
+    _processRingingSet(alarmSet);
+  }
+
+  /// Processes every alarm in [alarmSet] once.
+  Future<void> _processRingingSet(AlarmSet alarmSet) async {
+    for (final alarm in alarmSet.alarms) {
+      await _handleAlarm(alarm);
+    }
+  }
+
+  // ── Device lock check ──────────────────────────────────────────
+  Future<bool> _isDeviceLocked() async {
+    try {
+      final result = await _kChannel.invokeMethod<bool>('isDeviceLocked');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Alarm routing ──────────────────────────────────────────────
+  /// Single entry point for every alarm.
+  /// Synchronously claims the alarm ID before any await, preventing races.
+  Future<void> _handleAlarm(AlarmSettings alarm) async {
+    // Synchronous claim — prevents any concurrent call from double-processing.
+    if (_handledAlarmIds.contains(alarm.id)) return;
+    _handledAlarmIds.add(alarm.id); // claimed
+
+    final locked = await _isDeviceLocked();
+
+    if (locked) {
+      // Audio is already playing via the foreground service.
+      // Defer the ring UI until the user unlocks.
+      debugPrint('[Alarm] Locked — deferring UI for alarm ${alarm.id}');
+      if (!_pendingLockedAlarms.any((a) => a.id == alarm.id)) {
+        _pendingLockedAlarms.add(alarm);
+      }
+      // NOTE: We do NOT remove from _handledAlarmIds here.
+      // If the stream replays before unlock, the claim prevents re-queueing.
+      // _onResumed() removes the ID before calling _showAlarmScreen().
+    } else {
+      // Unlocked — show UI immediately.
+      // Pass through to _showAlarmScreen which re-checks the guard
+      // (it was added above, so it will proceed via the special path).
+      await _showAlarmScreen(alarm, alreadyClaimed: true);
+    }
+  }
+
+  /// Shows the AlarmRingScreen for [alarm].
+  ///
+  /// [alreadyClaimed] — true when called from _handleAlarm (ID already in
+  /// _handledAlarmIds). False when called from _onResumed after removing
+  /// the ID to flush a deferred alarm (guard re-checked inside).
+  Future<void> _showAlarmScreen(
+    AlarmSettings alarm, {
+    bool alreadyClaimed = false,
+  }) async {
+    if (!alreadyClaimed) {
+      if (_handledAlarmIds.contains(alarm.id)) return;
+      _handledAlarmIds.add(alarm.id);
+    }
+
+    final birthday = await _loadBirthdayById(alarm.payload);
+
+    final navigator = await _waitForNavigator();
+    if (navigator == null) {
+      // Navigator never became available — release the claim so it can retry.
+      _handledAlarmIds.remove(alarm.id);
+      return;
+    }
+
+    navigator.push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: false,
+        pageBuilder: (_, a, b) => AlarmRingScreen(
+          alarmSettings: alarm,
+          birthday: birthday,
+          onDismissed: () => _handledAlarmIds.remove(alarm.id),
+        ),
+        transitionDuration: const Duration(milliseconds: 400),
+        transitionsBuilder: (_, animation, __, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  // ── Notification tap payload ───────────────────────────────────
+  /// Handles cold-launch / resumed from a notification tap on an unlocked device.
   Future<void> _handleNotificationLaunchPayload() async {
     try {
-      final payload = await _kChannel.invokeMethod<String?>(
-        'getNotificationLaunchPayload',
-      );
+      final payload =
+          await _kChannel.invokeMethod<String?>('getNotificationLaunchPayload');
       if (payload == null || payload.isEmpty) return;
 
       debugPrint('[main] Notification tap payload: $payload');
 
-      // If Alarm.ringing already has this alarm, _onRingingChanged will handle
-      // it. But if the alarm was already stopped (e.g. user dismissed from
-      // notification shade) we still want to show the ring screen.
-      // Check if any ringing alarm matches this payload first.
+      // If the alarm is still ringing, _processRingingSet handles the UI.
       final ringing = Alarm.ringing.value.alarms;
-      final matchingAlarm = ringing.cast<AlarmSettings?>().firstWhere(
-        (a) => a?.payload == payload,
-        orElse: () => null,
-      );
+      final stillRinging = ringing.any((a) => a.payload == payload);
+      if (stillRinging) return;
 
-      if (matchingAlarm != null) {
-        // Already handled by _onRingingChanged — skip to avoid duplicate screen.
-        return;
-      }
-
-      // No ringing alarm found for this payload — the alarm may have been
-      // stopped already or the stream hasn't updated yet. Load the birthday
-      // and show the ring screen using a synthetic AlarmSettings.
+      // Alarm already stopped — build a synthetic settings object so the
+      // ring screen can still show the birthday info and reschedule.
       final birthday = await _loadBirthdayById(payload);
       if (birthday == null) return;
 
-      // Build a minimal AlarmSettings just to pass to AlarmRingScreen.
-      // The screen only uses id, payload, and the birthday object.
-      final syntheticSettings = AlarmSettings(
-        id: 0,
+      // Use a fixed sentinel ID for the synthetic alarm.
+      // Only one synthetic screen can be on the stack at a time.
+      const sentinelId = -1;
+      if (_handledAlarmIds.contains(sentinelId)) return;
+      _handledAlarmIds.add(sentinelId);
+
+      final syntheticAlarm = AlarmSettings(
+        id: sentinelId,
         dateTime: DateTime.now(),
         assetAudioPath: '',
         volumeSettings: const VolumeSettings.fixed(volume: 1.0),
@@ -133,24 +241,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       );
 
       final navigator = await _waitForNavigator();
-      if (navigator == null) return;
-
-      // Use a unique sentinel ID (-1) for dedup so it doesn't clash with real IDs.
-      const sentinelId = -1;
-      if (_shownAlarmIds.contains(sentinelId)) return;
-      _shownAlarmIds.add(sentinelId);
+      if (navigator == null) {
+        _handledAlarmIds.remove(sentinelId);
+        return;
+      }
 
       navigator.push(
         PageRouteBuilder(
           opaque: false,
           barrierDismissible: false,
           pageBuilder: (_, a, b) => AlarmRingScreen(
-            alarmSettings: syntheticSettings,
+            alarmSettings: syntheticAlarm,
             birthday: birthday,
-            onDismissed: () => _shownAlarmIds.remove(sentinelId),
+            onDismissed: () => _handledAlarmIds.remove(sentinelId),
           ),
           transitionDuration: const Duration(milliseconds: 400),
-          transitionsBuilder: (_, animation, a, child) => FadeTransition(
+          transitionsBuilder: (_, animation, __, child) => FadeTransition(
             opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
             child: child,
           ),
@@ -161,47 +267,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  // ── Central ringing handler ────────────────────────────────────
-  void _onRingingChanged(AlarmSet alarmSet) {
-    for (final alarm in alarmSet.alarms) {
-      _showAlarmScreen(alarm);
-    }
-  }
-
-  Future<void> _showAlarmScreen(AlarmSettings alarmSettings) async {
-    // Never push two screens for the same alarm.
-    if (_shownAlarmIds.contains(alarmSettings.id)) return;
-    _shownAlarmIds.add(alarmSettings.id);
-
-    final birthday = await _loadBirthdayById(alarmSettings.payload);
-
-    // Wait for the navigator (up to 3 s on cold launch from notification).
-    final navigator = await _waitForNavigator();
-    if (navigator == null) {
-      _shownAlarmIds.remove(alarmSettings.id);
-      return;
-    }
-
-    navigator.push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierDismissible: false,
-        pageBuilder: (_, a, b) => AlarmRingScreen(
-          alarmSettings: alarmSettings,
-          birthday: birthday,
-          onDismissed: () => _shownAlarmIds.remove(alarmSettings.id),
-        ),
-        transitionDuration: const Duration(milliseconds: 400),
-        transitionsBuilder: (_, animation, a, child) => FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
-          child: child,
-        ),
-      ),
-    );
-  }
-
   // ── Helpers ────────────────────────────────────────────────────
-
   Future<FriendBirthday?> _loadBirthdayById(String? birthdayId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -225,13 +291,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  /// Polls for the navigator up to 3 seconds (30 × 100 ms).
+  /// Polls for the navigator to become available (up to 6 s).
   Future<NavigatorState?> _waitForNavigator() async {
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 60; i++) {
       final state = navigatorKey.currentState;
       if (state != null) return state;
       await Future.delayed(const Duration(milliseconds: 100));
     }
+    debugPrint('[main] Navigator not available after 6 s');
     return null;
   }
 
@@ -245,9 +312,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => BirthdayProvider()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => BirthdayProvider())],
       child: MaterialApp(
         title: '생일알림',
         navigatorKey: navigatorKey,
