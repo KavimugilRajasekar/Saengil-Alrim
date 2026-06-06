@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:alarm/alarm.dart';
 import 'package:alarm/utils/alarm_set.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +35,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   StreamSubscription<AlarmSet>? _ringingSubscription;
+  StreamSubscription<ReceivedAction>? _awesomeActionSubscription;
 
   // ── Deduplication ─────────────────────────────────────────────
   // Alarm ID is in this set from the moment we decide what to do with it
@@ -56,6 +58,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // so any alarm already ringing at launch is handled right away.
     _ringingSubscription = Alarm.ringing.listen(_onRingingChanged);
 
+    // Listen to awesome notification click events while app is running
+    _awesomeActionSubscription =
+        NotificationController.actionStream.listen(_handleAwesomeAction);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Belt-and-suspenders: process current ringing state once the widget
       // tree is ready. The subscription above already covers this, but the
@@ -70,6 +76,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       // Handle notification-tap launch (unlocked device, app was killed).
       await _handleNotificationLaunchPayload();
+      await _handleInitialAwesomeAction();
     });
   }
 
@@ -211,60 +218,89 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (payload == null || payload.isEmpty) return;
 
       debugPrint('[main] Notification tap payload: $payload');
-
-      // If the alarm is still ringing, _processRingingSet handles the UI.
-      final ringing = Alarm.ringing.value.alarms;
-      final stillRinging = ringing.any((a) => a.payload == payload);
-      if (stillRinging) return;
-
-      // Alarm already stopped — build a synthetic settings object so the
-      // ring screen can still show the birthday info and reschedule.
-      final birthday = await _loadBirthdayById(payload);
-      if (birthday == null) return;
-
-      // Use a fixed sentinel ID for the synthetic alarm.
-      // Only one synthetic screen can be on the stack at a time.
-      const sentinelId = -1;
-      if (_handledAlarmIds.contains(sentinelId)) return;
-      _handledAlarmIds.add(sentinelId);
-
-      final syntheticAlarm = AlarmSettings(
-        id: sentinelId,
-        dateTime: DateTime.now(),
-        assetAudioPath: '',
-        volumeSettings: const VolumeSettings.fixed(volume: 1.0),
-        notificationSettings: const NotificationSettings(
-          title: 'Birthday Alarm',
-          body: '',
-        ),
-        payload: payload,
-      );
-
-      final navigator = await _waitForNavigator();
-      if (navigator == null) {
-        _handledAlarmIds.remove(sentinelId);
-        return;
-      }
-
-      navigator.push(
-        PageRouteBuilder(
-          opaque: false,
-          barrierDismissible: false,
-          pageBuilder: (_, a, b) => AlarmRingScreen(
-            alarmSettings: syntheticAlarm,
-            birthday: birthday,
-            onDismissed: () => _handledAlarmIds.remove(sentinelId),
-          ),
-          transitionDuration: const Duration(milliseconds: 400),
-          transitionsBuilder: (_, animation, __, child) => FadeTransition(
-            opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
-            child: child,
-          ),
-        ),
-      );
+      await _handleLaunchOrTapPayload(payload);
     } catch (e) {
       debugPrint('[main] _handleNotificationLaunchPayload error: $e');
     }
+  }
+
+  Future<void> _handleInitialAwesomeAction() async {
+    final initialAction = NotificationController.initialAction ??
+        await AwesomeNotifications().getInitialNotificationAction();
+    if (initialAction != null) {
+      final payload = initialAction.payload;
+      if (payload != null && payload.containsKey('birthdayId')) {
+        final birthdayId = payload['birthdayId'];
+        if (birthdayId != null) {
+          debugPrint('[main] Initial awesome notification action payload: $birthdayId');
+          await _handleLaunchOrTapPayload(birthdayId);
+        }
+      }
+    }
+  }
+
+  void _handleAwesomeAction(ReceivedAction action) async {
+    final payload = action.payload;
+    if (payload != null && payload.containsKey('birthdayId')) {
+      final birthdayId = payload['birthdayId'];
+      if (birthdayId != null) {
+        debugPrint('[main] Awesome notification action payload: $birthdayId');
+        await _handleLaunchOrTapPayload(birthdayId);
+      }
+    }
+  }
+
+  Future<void> _handleLaunchOrTapPayload(String payload) async {
+    // If the alarm is still ringing, _processRingingSet handles the UI.
+    final ringing = Alarm.ringing.value.alarms;
+    final stillRinging = ringing.any((a) => a.payload == payload);
+    if (stillRinging) return;
+
+    // Alarm already stopped — build a synthetic settings object so the
+    // ring screen can still show the birthday info and reschedule.
+    final birthday = await _loadBirthdayById(payload);
+    if (birthday == null) return;
+
+    // Use a fixed sentinel ID for the synthetic alarm.
+    // Only one synthetic screen can be on the stack at a time.
+    const sentinelId = -1;
+    if (_handledAlarmIds.contains(sentinelId)) return;
+    _handledAlarmIds.add(sentinelId);
+
+    final syntheticAlarm = AlarmSettings(
+      id: sentinelId,
+      dateTime: DateTime.now(),
+      assetAudioPath: '',
+      volumeSettings: const VolumeSettings.fixed(volume: 1.0),
+      notificationSettings: const NotificationSettings(
+        title: 'Birthday Alarm',
+        body: '',
+      ),
+      payload: payload,
+    );
+
+    final navigator = await _waitForNavigator();
+    if (navigator == null) {
+      _handledAlarmIds.remove(sentinelId);
+      return;
+    }
+
+    navigator.push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: false,
+        pageBuilder: (_, a, b) => AlarmRingScreen(
+          alarmSettings: syntheticAlarm,
+          birthday: birthday,
+          onDismissed: () => _handledAlarmIds.remove(sentinelId),
+        ),
+        transitionDuration: const Duration(milliseconds: 400),
+        transitionsBuilder: (_, animation, __, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
+          child: child,
+        ),
+      ),
+    );
   }
 
   // ── Helpers ────────────────────────────────────────────────────
@@ -306,6 +342,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ringingSubscription?.cancel();
+    _awesomeActionSubscription?.cancel();
     super.dispose();
   }
 

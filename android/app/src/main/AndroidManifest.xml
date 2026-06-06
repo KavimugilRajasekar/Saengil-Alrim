@@ -36,9 +36,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- DISABLE_KEYGUARD: needed to dismiss keyguard programmatically so
+         audio focus is granted to the alarm stream over the lock screen -->
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
 
     <!-- Exact alarm: USE_EXACT_ALARM is auto-granted (API 33+), no user prompt -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
@@ -71,6 +71,8 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -87,9 +89,12 @@
 
         <!--
         AlarmService: the foreground service that plays audio and shows
-        the notification. stopWithTask="false" keeps it alive even when
-        the user swipes the app away from recents. The ring UI is shown
-        by main.dart once the device is unlocked (not over the lock screen).
+        the notification.
+          foregroundServiceType="mediaPlayback" — required for audio on API 34+.
+          foregroundServiceType includes "alarm" so the OS routes audio through
+          AudioManager.STREAM_ALARM, which bypasses Do-Not-Disturb and plays
+          even when the device is locked and silent.
+          stopWithTask="false" — keeps audio alive when app is swiped away.
         -->
         <service
             android:name="com.gdelataillade.alarm.alarm.AlarmService"

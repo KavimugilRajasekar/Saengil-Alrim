@@ -96,6 +96,13 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // ── Lock-screen / wake flags ──────────────────────────────
+        // These are required so that:
+        //   (a) the Flutter UI draws OVER the keyguard (ring screen),
+        //   (b) the screen turns on when the alarm fires, AND
+        //   (c) the audio stream is routed correctly (not muted by keyguard).
+        applyAlarmWindowFlags()
+
         // Capture payload from the intent that launched this activity
         // (e.g. user tapped the alarm notification while device was unlocked).
         extractAlarmPayload(intent)
@@ -114,8 +121,37 @@ class MainActivity : FlutterActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // When a notification tap re-activates the activity while locked,
+        // re-apply the alarm flags so audio keeps playing over the keyguard.
+        applyAlarmWindowFlags()
         // Capture payload for the new intent (app running, notification tapped).
         extractAlarmPayload(intent)
+    }
+
+    // ── Window flags for alarm ring screen ───────────────────────
+    //
+    // Called on cold-start and on every new intent.
+    // We do NOT dismiss the keyguard here — the lock screen stays intact
+    // so the user only sees the notification banner while locked.
+    // Once the user unlocks (via notification tap or manual swipe), the
+    // ring screen renders on top correctly thanks to setShowWhenLocked.
+    private fun applyAlarmWindowFlags() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            // API 27+ — preferred; FLAG_SHOW_WHEN_LOCKED is deprecated
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        // Keep display lit while the ring screen is visible after unlock.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Note: keyguard is NOT dismissed here — AlarmService plays audio
+        // as a foreground service regardless of lock state, and the OS routes
+        // STREAM_ALARM correctly without needing explicit audio focus here.
     }
 
     // ── Extract alarm payload from intent extras ──────────────────

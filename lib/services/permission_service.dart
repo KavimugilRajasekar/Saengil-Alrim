@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,26 +35,13 @@ class PermissionService {
   // ── POST_NOTIFICATIONS (Android 13+) ──────────────────────────
 
   /// Returns true if the app has notification permission.
-  /// Always true on Android < 13 and iOS.
   Future<bool> hasNotificationPermission() async {
-    if (!Platform.isAndroid) return true;
-    try {
-      final result = await _channel.invokeMethod<bool>('hasNotificationPermission');
-      return result ?? true;
-    } catch (e) {
-      debugPrint('[Permission] hasNotificationPermission error: $e');
-      return true;
-    }
+    return await AwesomeNotifications().isNotificationAllowed();
   }
 
-  /// Shows the system dialog asking the user to grant POST_NOTIFICATIONS.
+  /// Shows the system dialog asking the user to grant notification permission.
   Future<void> requestNotificationPermission() async {
-    if (!Platform.isAndroid) return;
-    try {
-      await _channel.invokeMethod('requestNotificationPermission');
-    } catch (e) {
-      debugPrint('[Permission] requestNotificationPermission error: $e');
-    }
+    await AwesomeNotifications().requestPermissionToSendNotifications();
   }
 
   // ── Exact alarm permission ─────────────────────────────────────

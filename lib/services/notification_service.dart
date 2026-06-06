@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:alarm/alarm.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'birthday_service.dart';
 
@@ -27,6 +32,32 @@ class NotificationService {
   // ── Init ──────────────────────────────────────────────────────
   Future<void> init() async {
     await Alarm.init();
+
+    // Initialize Awesome Notifications
+    await AwesomeNotifications().initialize(
+      null, // uses launcher icon by default
+      [
+        NotificationChannel(
+          channelKey: 'birthday_channel',
+          channelName: 'Birthday Alarms',
+          channelDescription: 'Heads-up alarms and reminders for birthdays',
+          defaultColor: const Color(0xFFFF6B9D),
+          ledColor: const Color(0xFFFF6B9D),
+          importance: NotificationImportance.Max,
+          channelShowBadge: true,
+          locked: true,
+          defaultPrivacy: NotificationPrivacy.Public,
+          playSound: false, // Handled by alarm package
+          enableVibration: true,
+        ),
+      ],
+      debug: kDebugMode,
+    );
+
+    // Register listeners
+    await AwesomeNotifications().setListeners(
+      onActionReceivedMethod: NotificationController.onActionReceivedMethod,
+    );
   }
 
   // ── ID helpers ────────────────────────────────────────────────
@@ -89,19 +120,18 @@ class NotificationService {
       final audioPath = _validatePath(birthday.dDayRingtonePath!);
       if (audioPath != null) {
         try {
+          final dDayAlarmId = _dDayId(birthday.id);
           final success = await Alarm.set(
             alarmSettings: AlarmSettings(
-              id: _dDayId(birthday.id),
+              id: dDayAlarmId,
               dateTime: fireAt,
               assetAudioPath: audioPath,
               loopAudio: true,
               vibrate: true,
-              // androidFullScreenIntent: true is required for the AlarmService
-              // to post a high-priority notification and start audio reliably
-              // on all Android versions — including when the app is open.
-              // The Dart layer (main.dart) decides whether to show the ring
-              // screen immediately or defer it until the device is unlocked.
-              androidFullScreenIntent: true,
+              // false → do NOT pop the ring screen over the lock screen.
+              // The alarm service still plays audio as a foreground service.
+              // Ring screen is shown only after the user unlocks the device.
+              androidFullScreenIntent: false,
               // Keep ringing even when the user swipes the app away from recents.
               androidStopAlarmOnTermination: false,
               warningNotificationOnKill: Platform.isIOS,
@@ -117,6 +147,42 @@ class NotificationService {
               payload: birthday.id,
             ),
           );
+          if (success) {
+            await AwesomeNotifications().createNotification(
+              content: NotificationContent(
+                id: dDayAlarmId,
+                channelKey: 'birthday_channel',
+                title: '🎂 Birthday Today!',
+                body: "It's ${birthday.name}'s birthday! Show them some love 💕",
+                wakeUpScreen: true,   // lights up screen for notification banner
+                fullScreenIntent: false, // banner only — NOT a full-screen overlay
+                criticalAlert: true,
+                category: NotificationCategory.Alarm,
+                payload: {
+                  'birthdayId': birthday.id,
+                  'alarmId': dDayAlarmId.toString(),
+                },
+              ),
+              actionButtons: [
+                NotificationActionButton(
+                  key: 'STOP',
+                  label: 'Stop',
+                  actionType: ActionType.Default,
+                ),
+              ],
+              schedule: NotificationCalendar(
+                year: fireAt.year,
+                month: fireAt.month,
+                day: fireAt.day,
+                hour: fireAt.hour,
+                minute: fireAt.minute,
+                second: 0,
+                millisecond: 0,
+                preciseAlarm: true,
+                repeats: false,
+              ),
+            );
+          }
           debugPrint(
             '[Alarm] D-Day scheduled for ${birthday.name} at $fireAt → success=$success',
           );
@@ -161,17 +227,18 @@ class NotificationService {
             : 'in ${birthday.customAlarmDays} day${birthday.customAlarmDays > 1 ? 's' : ''}';
 
         try {
+          final advanceAlarmId = _advanceId(birthday.id);
           final success = await Alarm.set(
             alarmSettings: AlarmSettings(
-              id: _advanceId(birthday.id),
+              id: advanceAlarmId,
               dateTime: advanceDate,
               assetAudioPath: audioPath,
               loopAudio: true,
               vibrate: true,
-              // androidFullScreenIntent: true required for reliable notification
-              // + audio on all Android versions. The Dart layer handles whether
-              // to show the ring screen immediately or defer until unlock.
-              androidFullScreenIntent: true,
+              // false → do NOT pop the ring screen over the lock screen.
+              // The alarm service still plays audio as a foreground service.
+              // Ring screen is shown only after the user unlocks the device.
+              androidFullScreenIntent: false,
               androidStopAlarmOnTermination: false,
               warningNotificationOnKill: Platform.isIOS,
               volumeSettings: VolumeSettings.fade(
@@ -186,6 +253,42 @@ class NotificationService {
               payload: birthday.id,
             ),
           );
+          if (success) {
+            await AwesomeNotifications().createNotification(
+              content: NotificationContent(
+                id: advanceAlarmId,
+                channelKey: 'birthday_channel',
+                title: '🎁 Birthday Reminder!',
+                body: "${birthday.name}'s birthday is $daysLabel! Time to prepare 🎁",
+                wakeUpScreen: true,   // lights up screen for notification banner
+                fullScreenIntent: false, // banner only — NOT a full-screen overlay
+                criticalAlert: true,
+                category: NotificationCategory.Reminder,
+                payload: {
+                  'birthdayId': birthday.id,
+                  'alarmId': advanceAlarmId.toString(),
+                },
+              ),
+              actionButtons: [
+                NotificationActionButton(
+                  key: 'STOP',
+                  label: 'Stop',
+                  actionType: ActionType.Default,
+                ),
+              ],
+              schedule: NotificationCalendar(
+                year: advanceDate.year,
+                month: advanceDate.month,
+                day: advanceDate.day,
+                hour: advanceDate.hour,
+                minute: advanceDate.minute,
+                second: 0,
+                millisecond: 0,
+                preciseAlarm: true,
+                repeats: false,
+              ),
+            );
+          }
           debugPrint(
             '[Alarm] Advance scheduled for ${birthday.name} at $advanceDate → success=$success',
           );
@@ -198,9 +301,13 @@ class NotificationService {
 
   // ── Cancel ────────────────────────────────────────────────────
   Future<void> cancelBirthdayAlarms(String birthdayId) async {
-    await Alarm.stop(_dDayId(birthdayId));
-    await Alarm.stop(_advanceId(birthdayId));
-    debugPrint('[Alarm] Cancelled alarms for birthday ID: $birthdayId');
+    final dDayAlarmId = _dDayId(birthdayId);
+    final advanceAlarmId = _advanceId(birthdayId);
+    await Alarm.stop(dDayAlarmId);
+    await Alarm.stop(advanceAlarmId);
+    await AwesomeNotifications().cancel(dDayAlarmId);
+    await AwesomeNotifications().cancel(advanceAlarmId);
+    debugPrint('[Alarm/Awesome] Cancelled alarms and notifications for birthday ID: $birthdayId');
   }
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -249,5 +356,65 @@ class NotificationService {
       candidate = DateTime(year + 1, month, effectiveDayNext, hour, minute);
     }
     return candidate;
+  }
+}
+
+class NotificationController {
+  static ReceivedAction? initialAction;
+  static final StreamController<ReceivedAction> _actionStreamController =
+      StreamController<ReceivedAction>.broadcast();
+  static Stream<ReceivedAction> get actionStream => _actionStreamController.stream;
+
+  /// Use @pragma("vm:entry-point") to keep the method reachable when the app is killed
+  @pragma("vm:entry-point")
+  static Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
+    // If the button is 'STOP', stop the alarm
+    final payload = receivedAction.payload;
+    if (payload != null) {
+      final alarmIdStr = payload['alarmId'];
+      if (alarmIdStr != null) {
+        final alarmId = int.tryParse(alarmIdStr);
+        if (alarmId != null) {
+          if (receivedAction.buttonKeyPressed == 'STOP') {
+            await Alarm.stop(alarmId);
+            await AwesomeNotifications().cancel(alarmId);
+            
+            // Reschedule
+            final birthdayId = payload['birthdayId'];
+            if (birthdayId != null) {
+              await _rescheduleAfterDismiss(birthdayId, alarmId);
+            }
+            return;
+          }
+        }
+      }
+    }
+
+    if (receivedAction.actionLifeCycle == NotificationLifeCycle.Terminated) {
+      initialAction = receivedAction;
+    } else {
+      _actionStreamController.add(receivedAction);
+    }
+  }
+
+  static Future<void> _rescheduleAfterDismiss(String birthdayId, int firedId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('saved_birthdays');
+      if (json == null) return;
+
+      final birthdays = (jsonDecode(json) as List<dynamic>)
+          .map((e) => FriendBirthday.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      final birthday = birthdays.firstWhere((b) => b.id == birthdayId);
+      // Reschedule next year's alarm
+      await NotificationService().scheduleBirthdayAlarmsAfter(
+        birthday,
+        firedAlarmId: firedId,
+      );
+    } catch (e) {
+      debugPrint('[NotificationController] Reschedule error: $e');
+    }
   }
 }
