@@ -71,18 +71,20 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.12).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 1.0,
+      end: 1.12,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
     // Ring-wave animation (expanding circles)
     _ringCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat();
-    _ringAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOut),
-    );
+    _ringAnim = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOut));
 
     // Fade-in for the whole screen
     _fadeCtrl = AnimationController(
@@ -104,17 +106,19 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
     final rng = Random();
     _particles.clear();
     for (int i = 0; i < 60; i++) {
-      _particles.add(_Particle(
-        x: rng.nextDouble(),
-        y: -rng.nextDouble() * 0.5,
-        vx: (rng.nextDouble() - 0.5) * 0.006,
-        vy: 0.003 + rng.nextDouble() * 0.005,
-        color: _confettiColors[rng.nextInt(_confettiColors.length)],
-        size: 6 + rng.nextDouble() * 8,
-        rotation: rng.nextDouble() * 2 * pi,
-        rotationSpeed: (rng.nextDouble() - 0.5) * 0.15,
-        shape: rng.nextBool(),
-      ));
+      _particles.add(
+        _Particle(
+          x: rng.nextDouble(),
+          y: -rng.nextDouble() * 0.5,
+          vx: (rng.nextDouble() - 0.5) * 0.006,
+          vy: 0.003 + rng.nextDouble() * 0.005,
+          color: _confettiColors[rng.nextInt(_confettiColors.length)],
+          size: 6 + rng.nextDouble() * 8,
+          rotation: rng.nextDouble() * 2 * pi,
+          rotationSpeed: (rng.nextDouble() - 0.5) * 0.15,
+          shape: rng.nextBool(),
+        ),
+      );
     }
     _confettiTimer?.cancel();
     _confettiTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
@@ -180,8 +184,8 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
     final h = dt.hour == 0
         ? 12
         : dt.hour > 12
-            ? dt.hour - 12
-            : dt.hour;
+        ? dt.hour - 12
+        : dt.hour;
     final m = dt.minute.toString().padLeft(2, '0');
     final period = dt.hour < 12 ? 'AM' : 'PM';
     return '$h:$m $period';
@@ -189,11 +193,27 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
 
   String _formatDate(DateTime dt) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     const days = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
     ];
     return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}';
   }
@@ -222,9 +242,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
             _buildBackground(themeColor),
 
             // ── Confetti ─────────────────────────────────────────
-            CustomPaint(
-              painter: _ConfettiPainter(particles: _particles),
-            ),
+            CustomPaint(painter: _ConfettiPainter(particles: _particles)),
 
             // ── Main content ─────────────────────────────────────
             SafeArea(
@@ -286,9 +304,9 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            themeColor.withValues(alpha: 0.4),
-            themeColor.withValues(alpha: 0.86),
-            Colors.white.withValues(alpha: 0.6),
+            themeColor.withValues(alpha: 0.97),
+            themeColor.withValues(alpha: 0.99),
+            Colors.white.withValues(alpha: 1),
           ],
           stops: const [0.0, 0.45, 1.0],
         ),
@@ -363,12 +381,19 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
             decoration: BoxDecoration(
               color: themeColor.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accentBorder.withValues(alpha: 0.3), width: 1.5),
+              border: Border.all(
+                color: AppColors.accentBorder.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.alarm_rounded, color: AppColors.textDark, size: 16),
+                const Icon(
+                  Icons.alarm_rounded,
+                  color: AppColors.textDark,
+                  size: 16,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   isToday ? 'Birthday Alarm 🎂' : 'Birthday Reminder 🎁',
@@ -402,8 +427,8 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
             isToday
                 ? "It's $name's birthday today!\nShow them some love 💕"
                 : b != null
-                    ? "$name's birthday is in ${b.daysUntil} day${b.daysUntil == 1 ? '' : 's'}!\nTime to prepare 🎁"
-                    : "Don't forget this birthday!",
+                ? "$name's birthday is in ${b.daysUntil} day${b.daysUntil == 1 ? '' : 's'}!\nTime to prepare 🎁"
+                : "Don't forget this birthday!",
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontFamily: AppStyles.bubblyFont,
@@ -422,13 +447,18 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
                 color: themeColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                    color: AppColors.accentBorder.withValues(alpha: 0.2), width: 1),
+                  color: AppColors.accentBorder.withValues(alpha: 0.2),
+                  width: 1,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.sticky_note_2_outlined,
-                      color: AppColors.textLight, size: 14),
+                  const Icon(
+                    Icons.sticky_note_2_outlined,
+                    color: AppColors.textLight,
+                    size: 14,
+                  ),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
@@ -468,8 +498,11 @@ class _AlarmRingScreenState extends State<AlarmRingScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.alarm_off_rounded,
-                  color: AppColors.textDark, size: 24),
+              const Icon(
+                Icons.alarm_off_rounded,
+                color: AppColors.textDark,
+                size: 24,
+              ),
               const SizedBox(width: 10),
               const Text(
                 'Stop Alarm',
@@ -582,7 +615,10 @@ class _ConfettiPainter extends CustomPainter {
       } else {
         canvas.drawRect(
           Rect.fromCenter(
-              center: Offset.zero, width: p.size, height: p.size * 0.5),
+            center: Offset.zero,
+            width: p.size,
+            height: p.size * 0.5,
+          ),
           paint,
         );
       }
